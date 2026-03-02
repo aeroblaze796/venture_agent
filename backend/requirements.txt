@@ -1,0 +1,14 @@
+# FastAPI 相关
+fastapi>=0.100.0,<0.111.0
+uvicorn[standard]>=0.23.0,<0.30.0
+pydantic>=2.4.0,<2.8.0
+
+# LangChain与LangGraph相关 (升级至 0.2.x 稳定版系，解决 packaging < 24.0 冲突)
+langchain>=0.2.0,<0.4.0
+langchain-core>=0.2.0,<0.4.0
+langchain-community>=0.2.0,<0.4.0
+langchain-openai>=0.1.0,<0.3.0
+langgraph>=0.1.0,<0.3.0
+
+# 环境变量及辅助库
+python-dotenv>=1.0.0,<2.0.0
