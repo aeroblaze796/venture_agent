@@ -8,10 +8,10 @@
   - [x] 创建简易 Router 逻辑
   - [x] 实现基础对话节点 (Mock 学习辅导 Agent)
   - [x] 将 LangGraph 集成至 FastAPI 接口
-- [ ] 前端基础页面搭建 (React + Ant Design)
-  - [ ] 初始化 React 工程
-  - [ ] 配置 Ant Design
-  - [ ] 实现简易聊天交互界面 (聊天框、消息历史)
-  - [ ] 对接后端聊天 API
-- [ ] 运行与调试
-  - [ ] 确保前后端可以顺畅连通并进行基础对话
+- [x] 前端基础页面搭建 (React + Ant Design)
+  - [x] 初始化 React 工程
+  - [x] 配置 Ant Design
+  - [x] 实现简易聊天交互界面 (聊天框、消息历史)
+  - [x] 对接后端聊天 API
+- [x] 运行与调试
+  - [x] 确保前后端可以顺畅连通并进行基础对话
