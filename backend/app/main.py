@@ -32,12 +32,29 @@ def read_root():
 def health_check():
     return {"status": "ok"}
 
-# 预留给后续 LangGraph 对接的简易聊天接口
+from langchain_core.messages import HumanMessage
+from app.agent.graph import app_graph
+
 @app.post("/api/chat", response_model=ChatResponse)
 def chat_endpoint(request: ChatRequest):
-    # 此处暂作 Mock 返回，后续将接入 LangGraph Router
-    mock_reply = f"Mock Agent 收到你的消息: '{request.message}'。我目前还在搭建中。"
-    return ChatResponse(reply=mock_reply)
+    # 将用户的输入封装成 LangChain 认识的 Message
+    input_message = HumanMessage(content=request.message)
+    
+    # 构造初始状态
+    initial_state = {"messages": [input_message], "next_agent": ""}
+    
+    # 执行图流转
+    final_state = app_graph.invoke(initial_state)
+    
+    # 获取最后一条输出的消息
+    messages = final_state.get("messages", [])
+    if messages:
+        # LangGraph 执行完成后，最后一条消息通常也就是 Agent 返回的回复
+        final_reply = messages[-1].content
+    else:
+        final_reply = "抱歉，系统内部状态流转异常，未返回消息。"
+        
+    return ChatResponse(reply=final_reply)
 
 if __name__ == "__main__":
     import uvicorn
