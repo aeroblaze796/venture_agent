@@ -13,4 +13,10 @@
   - [x] 编写 Cypher 语句将萃取的数据成功导入图数据库
   - [x] 测试基础图查询连通性
 
-注意：此时还未提供LLM的API，数据为模拟数据，后续需要替换为真实数据。
+# VentureAgent 补充任务：接入真实 LLM (DeepSeek)
+- [x] 切换大语言模型架构
+  - [x] 在 [backend/.env](file:///e:/%E5%A4%A7%E4%B8%89%E4%B8%8B/%E5%A4%A7%E6%95%B0%E6%8D%AE%E7%89%B9%E8%89%B2%E8%AF%BE%E7%A8%8B%E6%A8%A1%E5%9D%97/venture_agent/backend/.env) 中配置 DeepSeek API Key
+  - [x] 修改 [extract.py](file:///e:/%E5%A4%A7%E4%B8%89%E4%B8%8B/%E5%A4%A7%E6%95%B0%E6%8D%AE%E7%89%B9%E8%89%B2%E8%AF%BE%E7%A8%8B%E6%A8%A1%E5%9D%97/venture_agent/backend/app/ingestion/extract.py)，将 Mock/OpenAI 逻辑替换为基于 DeepSeek API 的真实结构化提取
+  - [x] 测试真实的案例抽取能力
+
+注意：当前已接入DeepSeek，但是目前对模拟数据进行抽取入库，还未使用真实数据！

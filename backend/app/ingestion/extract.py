@@ -1,6 +1,6 @@
 import os
 from typing import List, cast
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from app.ingestion.db_config import db
@@ -25,8 +25,28 @@ def extract_knowledge(text: str) -> ExtractedData:
     print(f"正在分析文本内容... \n({text[:50]}...)")
     
     try:
-        # 尝试初始化大模型（如果没有 API Key，直接在这里就会报错）
-        llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+        # 读取 .env 中配置的 DeepSeek API 信息
+        raw_api_key = os.getenv("DEEPSEEK_API_KEY")
+        base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
+        
+        if not raw_api_key or raw_api_key == "your_key_here":
+            raise ValueError("请在 backend/.env 中配置有效的 DEEPSEEK_API_KEY")
+            
+        print("🔗 已连接到 DeepSeek 核心，正在尝试结构化抽取...")
+        api_key_secret = SecretStr(raw_api_key)
+        
+        # DeepSeek 的 API 完全兼容 OpenAI 的 Python SDK
+        # 使用其实惠聪明的模型 deepseek-chat
+        llm = ChatOpenAI(
+            model="deepseek-chat",
+            api_key=api_key_secret,
+            base_url=base_url,
+            temperature=0,
+            max_retries=2
+        )
+        
+        # 使用 Pydantic 模型作为 structured output，保证 LLM 稳定输出 JSON
+        # DeepSeek 的 function calling 能力极强，可无缝对接 langchain 的 with_structured_output
         structured_llm = llm.with_structured_output(ExtractedData)
         
         prompt = ChatPromptTemplate.from_messages([
