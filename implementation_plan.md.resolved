@@ -1,33 +1,33 @@
-# VentureAgent MVP 实施计划
+# VentureAgent Phase 1: 知识底座建设 实施计划
 
 ## 产品目标
-开发 VentureAgent 的最小可行性产品 (MVP)，主要目标是搭建前后端的基础链路，不引入过重的数据库（如 Neo4j 和 PostgreSQL），仅保留核心的 LangGraph 对话控制流和前端的简易 UI 交互，确保项目代码能够跑起来，供初步演示和体验。
+在 MVP（最小可行性产品）前后端通路打通后，紧接着需要实现《需求文档》第七节中定义的 **Phase 1: 知识底座建设**。
+本阶段的目标是基于 Neo4j 数据库搭建底层的知识图谱与超图（Hypergraph），并利用大语言模型（LLM）对现有的双创预料（如商业计划书案例）进行实体和关系的结构化抽取与落盘，为后续 Agent 的深层次逻辑推演（GraphRAG）提供数据基础。
 
 ## Proposed Changes (拟议变更)
 
-### 后端 (Python/FastAPI + LangGraph)
-考虑到初稿需要轻量化且快速运行，后端的架构如下：
-- **框架搭建**: `backend/app/main.py` 作为入口，引入 FastAPI 框架并配置跨域 (CORS)。
-- **智能体结构**: 在 `backend/app/agent/graph.py` 中编写简单的 LangGraph 逻辑。包含一个简化的 Router 和一个模拟的“学习辅导 Agent (Student Learning Tutor)”，在 MVP 中仅作基于规则或是简单提示词的回应。
-- **依赖管理**: 提供 `requirements.txt` 以供一键安装依赖（如 `fastapi`, `uvicorn`, `langgraph`, `langchain` 等）。
+### 1. 数据库与环境引入 (Environment Setup)
+- **后端依赖增强**: 更新后端 [requirements.txt](file:///e:/%E5%A4%A7%E4%B8%89%E4%B8%8B/%E5%A4%A7%E6%95%B0%E6%8D%AE%E7%89%B9%E8%89%B2%E8%AF%BE%E7%A8%8B%E6%A8%A1%E5%9D%97/venture_agent/backend/requirements.txt)，引入 `neo4j` (Python 驱动) 以及 `langchain-community` 中专门用于图谱图例和抽取的相关包。
+- **数据库部署**: 推荐使用 Docker 方式在本地启动免安装的 `Neo4j` (Community Edition) 容器。
 
-### 前端 (React + Ant Design)
-基于技术架构的要求，前端使用 React 18 搭配 Ant Design，为了快速启动使用 Vite 构建：
-- **工程初始化**: 创建 `frontend` 目录，生成基于 Vite 的 React 模板。
-- **页面构建**: 实现一个基础的聊天页面组件，包含历史消息列表和底部的气泡输入框。运用 Ant Design 的组件群（如 `List`, `Input`, `Button`）。
-- **接口联调**: 实现与后端 `/api/chat` 接口的通信，完成一问一答的数据闭环。
+### 2. 核心图模型与超图构建 (Ontology Schema & Hypergraph Modeling)
+我们将根据文档中的定义，在 Neo4j 中实施“节点化超边（Hyperedge-as-a-Node）”的图建模规范：
+- **基础节点(Nodes)**: 创建如 `Project`, `Technology`, `Market`, `Participant` 等实体类型。
+- **超边节点(Hyperedges)**: 
+  - `Value_Loop`（价值闭环）：将 `Market`、`Technology`、`Project` 连接到此中心节点。
+  - `Risk_Pattern`（风险模式）：将风险特征和相对应的业务场景连接，为后续“逻辑粉碎机制”储备弹药。
+
+### 3. 数据抽取与落盘管道 (Data Ingestion Pipeline)
+在 `backend/app/` 下新建一个专门的数据摄取模块（如 `backend/app/ingestion/`）：
+- **提取逻辑脚本**: 编写一段 Python 脚本，读取事先准备好的几则 Mock 案例（简单的文本段落）；
+- **LLM 抽取封装**: 使用 LangChain 的 `LLMGraphTransformer` 或自定义的 Extraction Chain 对文本进行结构化实体与关系的输出。
+- **数据写入**: 使用 Neo4j 驱动提供的 Cypher 接口，将提取到的三元组和超边概念持久化写入到 Neo4j 数据库中。
 
 ## Verification Plan (验证计划)
 
-### 自动化/命令行验证
-1. **后端验证**:
-   命令行执行：`cd backend && pip install -r requirements.txt && uvicorn app.main:app --reload`
-   访问 `http://localhost:8000/docs` 验证 FastAPI 的 Swagger API 文档是否正常加载。
-2. **前端验证**:
-   命令行执行：`cd frontend && npm install && npm run dev`
-   终端输出正确的 Localhost 地址，表示 Vite 开发服务器运行成功。
+### 自动化/脚本验证
+- **Neo4j 连通性测试**: 在 Python 中编写 `test_neo4j_connection.py` 脚本，执行简单的 `MATCH (n) RETURN count(n)` 查询，终端应当成功打印出节点数量（初始为 0 ）。
+- **抽取测试**: 运行 `ingestion` 脚本处理一篇 Mock 文本后，脚本不抛出异常并在控制台输出成功提取的 Node 对象与 Edge 关系对象。
 
 ### 手动验证
-- 启动前后端服务后，打开前端页面在浏览器中的对应地址（如 `http://localhost:5173`）。
-- 在聊天框中输入“你好，请问你是谁？”，点击发送。
-- 等待后端 LangGraph 处理完毕并返回消息“我是你的辅导学习 Agent...”，并且 UI 显示正常，即表明前后端链路全面打通。
+- 访问 Neo4j 的可视化浏览器界面（通常为 `http://localhost:7474`），输入 Cypher 语句 `MATCH (n) RETURN n`，应当能在图形化界面中清晰看到 `Project`、`Market` 以及连接两者的超图节点等拓扑结构被成功建立。

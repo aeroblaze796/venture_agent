@@ -1,17 +1,16 @@
-# VentureAgent MVP 开发任务清单
+# VentureAgent Phase 1 知识底座建设 (Neo4j 与 数据萃取)
 
-- [x] 后端基础框架搭建 (FastAPI)
-  - [x] 编写 [requirements.txt](file:///e:/%E5%A4%A7%E4%B8%89%E4%B8%8B/%E5%A4%A7%E6%95%B0%E6%8D%AE%E7%89%B9%E8%89%B2%E8%AF%BE%E7%A8%8B%E6%A8%A1%E5%9D%97/venture_agent/backend/requirements.txt) 并安装依赖
-  - [x] 创建 [backend/app/main.py](file:///e:/%E5%A4%A7%E4%B8%89%E4%B8%8B/%E5%A4%A7%E6%95%B0%E6%8D%AE%E7%89%B9%E8%89%B2%E8%AF%BE%E7%A8%8B%E6%A8%A1%E5%9D%97/venture_agent/backend/app/main.py) 入口文件
-  - [x] 实现跨域请求 (CORS) 与基础路由
-- [x] 核心智能体编排 (LangGraph)
-  - [x] 创建简易 Router 逻辑
-  - [x] 实现基础对话节点 (Mock 学习辅导 Agent)
-  - [x] 将 LangGraph 集成至 FastAPI 接口
-- [x] 前端基础页面搭建 (React + Ant Design)
-  - [x] 初始化 React 工程
-  - [x] 配置 Ant Design
-  - [x] 实现简易聊天交互界面 (聊天框、消息历史)
-  - [x] 对接后端聊天 API
-- [x] 运行与调试
-  - [x] 确保前后端可以顺畅连通并进行基础对话
+- [x] 环境搭建与拓展
+  - [x] 在 [requirements.txt](file:///e:/%E5%A4%A7%E4%B8%89%E4%B8%8B/%E5%A4%A7%E6%95%B0%E6%8D%AE%E7%89%B9%E8%89%B2%E8%AF%BE%E7%A8%8B%E6%A8%A1%E5%9D%97/venture_agent/backend/requirements.txt) 中添加 Neo4j 和 LLM 提取所需的依赖包
+  - [x] 在本地或 Docker 中启动 Neo4j 数据库实例
+- [x] 数据本体定义 (Ontology Schema)
+  - [x] 定义核心节点 (Project, Technology, Market 等) 模型
+  - [x] 定义高阶超边 (Hyperedges) 数据结构与存储模式 (Hyperedge-as-a-Node)
+- [x] 构建数据萃取脚本 (Data Ingestion)
+  - [x] 编写 Python 脚本解析样本预料/案例
+  - [x] 结合 LLM 实现结构化数据提取
+- [x] Neo4j 数据库写入与测试
+  - [x] 编写 Cypher 语句将萃取的数据成功导入图数据库
+  - [x] 测试基础图查询连通性
+
+注意：此时还未提供LLM的API，数据为模拟数据，后续需要替换为真实数据。
