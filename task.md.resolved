@@ -18,3 +18,6 @@
   - [x] 在 [backend/.env](file:///e:/%E5%A4%A7%E4%B8%89%E4%B8%8B/%E5%A4%A7%E6%95%B0%E6%8D%AE%E7%89%B9%E8%89%B2%E8%AF%BE%E7%A8%8B%E6%A8%A1%E5%9D%97/venture_agent/backend/.env) 中配置 DeepSeek API Key
   - [x] 修改 [extract.py](file:///e:/%E5%A4%A7%E4%B8%89%E4%B8%8B/%E5%A4%A7%E6%95%B0%E6%8D%AE%E7%89%B9%E8%89%B2%E8%AF%BE%E7%A8%8B%E6%A8%A1%E5%9D%97/venture_agent/backend/app/ingestion/extract.py)，将 Mock/OpenAI 逻辑替换为基于 DeepSeek API 的真实结构化提取
   - [x] 测试真实的案例抽取能力
+- [x] 构建批量 PDF 商业计划书数据管道
+  - [x] 引入 `pypdf` 依赖
+  - [x] 编写 [extract_from_ppt.py](file:///e:/%E5%A4%A7%E4%B8%89%E4%B8%8B/%E5%A4%A7%E6%95%B0%E6%8D%AE%E7%89%B9%E8%89%B2%E8%AF%BE%E7%A8%8B%E6%A8%A1%E5%9D%97/venture_agent/backend/app/ingestion/extract_from_ppt.py)，实现真实 PDF 目录的遍历、文本加载与结构化抽取入库
