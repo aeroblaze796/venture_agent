@@ -1,33 +1,30 @@
-# VentureAgent Phase 1: 知识底座建设 实施计划
+# VentureAgent Phase 2: Agent 逻辑开发 实施计划
 
 ## 产品目标
-在 MVP（最小可行性产品）前后端通路打通后，紧接着需要实现《需求文档》第七节中定义的 **Phase 1: 知识底座建设**。
-本阶段的目标是基于 Neo4j 数据库搭建底层的知识图谱与超图（Hypergraph），并利用大语言模型（LLM）对现有的双创预料（如商业计划书案例）进行实体和关系的结构化抽取与落盘，为后续 Agent 的深层次逻辑推演（GraphRAG）提供数据基础。
+在 Phase 1 (知识底座与数据抽取) 成功落盘后，我们需要进入系统最核心的大脑层建设——**Phase 2: Agent 逻辑开发**。
+本阶段目标是基于 **LangGraph** 框架搭建多智能体协同网络，实现一个精确状态控制的路由中枢（Router）及数个专精的教育 Agent，彻底告别单体大模型的黑盒问答，提供具备记忆、路由流转与规范约束的专业双创教学体验。
 
 ## Proposed Changes (拟议变更)
 
-### 1. 数据库与环境引入 (Environment Setup)
-- **后端依赖增强**: 更新后端 [requirements.txt](file:///e:/%E5%A4%A7%E4%B8%89%E4%B8%8B/%E5%A4%A7%E6%95%B0%E6%8D%AE%E7%89%B9%E8%89%B2%E8%AF%BE%E7%A8%8B%E6%A8%A1%E5%9D%97/venture_agent/backend/requirements.txt)，引入 `neo4j` (Python 驱动) 以及 `langchain-community` 中专门用于图谱图例和抽取的相关包。
-- **数据库部署**: 推荐使用 Docker 方式在本地启动免安装的 `Neo4j` (Community Edition) 容器。
+### 1. LangGraph 基础通信框架搭建 (Graph State)
+- **状态树设计 (State Management)**: 在 `backend/app/agent/` 中定义一套全局的数据结构（如 `AgentState`），用于在不同的节点间传递消息历史、当前节点定位、用户能力图谱评分以及从 Neo4j 检索出的关键依据。
+- **持久化配置 (Checkpointer)**: 初期使用本地 Sqlite (在开发测试时) 或内存保存会话 Checkpoint，确保单次交互的时序控制流不被丢弃。
 
-### 2. 核心图模型与超图构建 (Ontology Schema & Hypergraph Modeling)
-我们将根据文档中的定义，在 Neo4j 中实施“节点化超边（Hyperedge-as-a-Node）”的图建模规范：
-- **基础节点(Nodes)**: 创建如 `Project`, `Technology`, `Market`, `Participant` 等实体类型。
-- **超边节点(Hyperedges)**: 
-  - `Value_Loop`（价值闭环）：将 `Market`、`Technology`、`Project` 连接到此中心节点。
-  - `Risk_Pattern`（风险模式）：将风险特征和相对应的业务场景连接，为后续“逻辑粉碎机制”储备弹药。
+### 2. 构建核心智能体节点 (Agent Nodes)
+根据 PRD 定义，我们将实现以下核心处理节点：
+- **Router 路由中枢**: 负责接收用户的输入，根据意图 (判别是提问知识、需要商业模式压测、还是索取打分) 将交互引流至下方特定的 Agent。
+- **A1 学习辅导 Agent (Tutor)**: 提供基础商业概念解释，并能下达具体的微任务指引。
+- **A2 项目教练 Agent (Coach)**: 核心“毒舌”节点，结合 Neo4j 中查到的 `Risk_Pattern` 与 `Value_Loop`，执行苏格拉底式发问（不直接给答案而是追问缺陷）。
 
-### 3. 数据抽取与落盘管道 (Data Ingestion Pipeline)
-在 `backend/app/` 下新建一个专门的数据摄取模块（如 `backend/app/ingestion/`）：
-- **提取逻辑脚本**: 编写一段 Python 脚本，读取事先准备好的几则 Mock 案例（简单的文本段落）；
-- **LLM 抽取封装**: 使用 LangChain 的 `LLMGraphTransformer` 或自定义的 Extraction Chain 对文本进行结构化实体与关系的输出。
-- **数据写入**: 使用 Neo4j 驱动提供的 Cypher 接口，将提取到的三元组和超边概念持久化写入到 Neo4j 数据库中。
+### 3. 数据层接入与安全护栏 (RAG & Constraints)
+- **GraphRAG 接入**: 将我们在 Phase 1 中封装的 `db_config.py` 和抽取代码编排为 LangGraph 的工具节点（Tool Node），使得 Agent 可以在需要时去 Neo4j 中验证信息。
+- **硬编码约束 (Constraints Engine)**: 尝试构建 `constraints.py` 将部分商业基础逻辑（如 H4 市场规模定律）硬编码为前置或后置校验器，拦截 LLM 的幻觉。
 
 ## Verification Plan (验证计划)
 
 ### 自动化/脚本验证
-- **Neo4j 连通性测试**: 在 Python 中编写 `test_neo4j_connection.py` 脚本，执行简单的 `MATCH (n) RETURN count(n)` 查询，终端应当成功打印出节点数量（初始为 0 ）。
-- **抽取测试**: 运行 `ingestion` 脚本处理一篇 Mock 文本后，脚本不抛出异常并在控制台输出成功提取的 Node 对象与 Edge 关系对象。
+- 编写一小段模拟对话脚本，向系统的入口 Graph 发送连续三条对话，验证 `Router` 能否根据上下文正确切换至 `A1` 和 `A2`。
 
 ### 手动验证
-- 访问 Neo4j 的可视化浏览器界面（通常为 `http://localhost:7474`），输入 Cypher 语句 `MATCH (n) RETURN n`，应当能在图形化界面中清晰看到 `Project`、`Market` 以及连接两者的超图节点等拓扑结构被成功建立。
+- 使用 FastAPI 暴漏一个 `/api/chat` 的调试接口。
+- 发送一条极具破绽的商业计划信息（例如“我们的产品没有竞争对手”），验证 `A2` 是否能顺利调取知识底层信息并进行压力测试反驳反馈。

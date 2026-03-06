@@ -18,8 +18,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from typing import Optional
+
 class ChatRequest(BaseModel):
     message: str
+    session_id: Optional[str] = "default_session_123"
 
 class ChatResponse(BaseModel):
     reply: str
@@ -43,8 +46,11 @@ def chat_endpoint(request: ChatRequest):
     # 构造初始状态
     initial_state = {"messages": [input_message], "next_agent": ""}
     
+    # 因为 LangGraph 配置了 checkpointer，必须携带 thread_id (对应该 session)
+    config = {"configurable": {"thread_id": request.session_id}}
+    
     # 执行图流转
-    final_state = app_graph.invoke(initial_state)
+    final_state = app_graph.invoke(initial_state, config=config)
     
     # 获取最后一条输出的消息
     messages = final_state.get("messages", [])
