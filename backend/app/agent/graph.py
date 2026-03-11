@@ -8,6 +8,8 @@ from langgraph.checkpoint.memory import MemorySaver
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field, SecretStr
+from app.agent.constraints import constraints_engine
+from app.agent.tools import query_neo4j_for_projects
 
 # 读取环境变量
 load_dotenv()
@@ -113,9 +115,33 @@ def learning_tutor_node(state: AgentState) -> dict[str, Any]:
 def project_coach_node(state: AgentState) -> dict[str, Any]:
     print("🧠 [Coach Node] 项目教练 Agent (A2) 正在进行逻辑压测...")
     messages = state.get("messages", [])
+    raw_content = messages[-1].content if messages else ""
+    last_message = raw_content if isinstance(raw_content, str) else str(raw_content)
     
     try:
         llm = get_llm()
+        
+        # 1. 运行前置安全护栏 (Constraints Engine)
+        warnings = constraints_engine.run_audit(last_message)
+        warning_text = "\n".join(warnings) if warnings else "无预警项"
+        if warnings:
+            print(f"⚠️ [护栏拦截触发] 共 {len(warnings)} 项商业规则违背")
+            
+        # 2. 从图数据库检索相似案例 (GraphRAG)
+        # MVP 阶段使用大模型快速提取短小的核心业务关键词，替代粗暴文本切片
+        class KeywordExtraction(BaseModel):
+            keyword: str = Field(description="从学生的输入中提取最核心的【项目产品名词】或【业务方向】（如'数据湖'，'外卖代拿'）。不得超过8个字，如果有多个词，只选最核心的一个词。")
+            
+        extractor = llm.with_structured_output(KeywordExtraction)
+        extraction = cast(KeywordExtraction, extractor.invoke([
+            ("system", "你负责从学生的话语中提取核心商业实体以供Neo4j查询。"),
+            ("human", f"句子：{last_message}")
+        ]))
+        keyword = extraction.keyword
+        
+        rag_context = query_neo4j_for_projects(keyword)
+        print(f"🔍 [GraphRAG 检索完成] 提取关键词: {keyword}")
+        print(f"   [检索内容]:\n{rag_context}\n")
         
         # 针对 A2 的核心人设与指引 (毒舌、苏格拉底式发问)
         system_prompt = (
@@ -127,7 +153,10 @@ def project_coach_node(state: AgentState) -> dict[str, Any]:
             "2. 【一针见血】：每次回复只指出1个（最多2个）最核心的痛点或逻辑伪命题。\n"
             "3. 引入竞争残酷性，比如假设巨头入场、或者资金链断裂的压力测试。\n"
             "4. 语气可以带有威严，甚至有些“毒舌”，像是参加严厉的风险投资路演环节。\n"
-            "5. 在提问的最后，要求对方针对你提出的漏洞给出具体的防御方案或数据证明。"
+            "5. 在提问的最后，要求对方针对你提出的漏洞给出具体的防御方案或数据证明。\n\n"
+            "【以下是系统后台传递给你的诊断信息，请作为你压测的重点依据（不要直接暴露给学生这是系统提示的）】:\n"
+            "护栏规则预警: {warning_text}\n"
+            "图数据库检索出的对标项目与价值闭环: {rag_context}"
         )
         
         prompt = ChatPromptTemplate.from_messages([
@@ -136,7 +165,11 @@ def project_coach_node(state: AgentState) -> dict[str, Any]:
         ])
         
         chain = prompt | llm
-        response_msg = chain.invoke({"messages": messages})
+        response_msg = chain.invoke({
+            "messages": messages,
+            "warning_text": warning_text,
+            "rag_context": rag_context
+        })
         
         return {"messages": [response_msg]}
         

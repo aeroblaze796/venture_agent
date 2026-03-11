@@ -24,15 +24,15 @@
 
 # VentureAgent Phase 2: Agent 逻辑开发 任务清单
 - [x] LangGraph 基础通信框架搭建 (Router)
-  - [x] 定义全局状态数据结构 [AgentState](file:///e:/%E5%A4%A7%E4%B8%89%E4%B8%8B/%E5%A4%A7%E6%95%B0%E6%8D%AE%E7%89%B9%E8%89%B2%E8%AF%BE%E7%A8%8B%E6%A8%A1%E5%9D%97/venture_agent/backend/app/agent/graph.py#18-25)
+  - [x] 定义全局状态数据结构 [AgentState](file:///e:/%E5%A4%A7%E4%B8%89%E4%B8%8B/%E5%A4%A7%E6%95%B0%E6%8D%AE%E7%89%B9%E8%89%B2%E8%AF%BE%E7%A8%8B%E6%A8%A1%E5%9D%97/venture_agent/backend/app/agent/graph.py#20-27)
   - [x] 构建负责意图分发的 `Router Node`
   - [x] 接入内存 Checkpointer 实现短时记忆持久化
 - [x] 核心互动节点开发 (A1 & A2)
   - [x] 构建 `Tutor Node` (A1 学习辅导 Agent)
   - [x] 构建 `Coach Node` (A2 项目教练 Agent - 毒舌与逻辑粉碎机制)
-- [ ] RAG 与图谱安全护栏集成
-  - [ ] 将 Neo4j 图谱查询逻辑封装为 Langchain Tool
-  - [ ] 编写前置硬编码约束 (如 H4/H8 商业定律探测策略)
-  - [ ] 通过终端或 `/api/chat` 完成一次完整的带状态的长程对话测试
+- [x] RAG 与图谱安全护栏集成
+  - [x] 将 Neo4j 图谱查询逻辑封装为 Langchain Tool
+  - [x] 编写前置硬编码约束 (如 H4/H8 商业定律探测策略)
+  - [x] 通过终端或 `/api/chat` 完成一次完整的带状态的长程对话测试
 
-注意：目前暂时将记忆存入内存。每一次运行test_graph.py开启一个新的记忆，运行结束后自动释放；或者每一次通过终端开启后端，对应一个新的记忆，终止终端则释放。
+注意：目前暂时将记忆存入内存。每一次运行test_graph.py开启一个新的记忆，运行结束后自动释放；或者每一次通过终端开启后端，对应一个新的记忆，终止终端则释放。此外，neo4j中的数据能够检索到，但貌似没有融入LLM的回答中？
