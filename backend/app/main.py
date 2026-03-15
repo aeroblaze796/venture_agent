@@ -2,6 +2,9 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from app.auth import auth_router
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 app = FastAPI(
     title="VentureAgent API",
@@ -17,6 +20,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 
 from typing import Optional
 
@@ -64,5 +69,5 @@ def chat_endpoint(request: ChatRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    # 为了兼容本地直接运行 python main.py
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    # 确保从 backend 根目录启动时能正确加载模块
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)

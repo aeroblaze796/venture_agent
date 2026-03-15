@@ -29,16 +29,28 @@ class AgentState(TypedDict, total=False):
 # 辅助函数：获取统一的 DeepSeek 大模型实例
 # -----------------------------------------------------------------------------
 def get_llm():
+    import httpx
     raw_api_key = os.getenv("DEEPSEEK_API_KEY")
     base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
     if not raw_api_key or raw_api_key == "your_key_here":
         raise ValueError("请在 backend/.env 中配置有效的 DEEPSEEK_API_KEY")
+    
+    # 获取环境变量中的代理（考虑到部分用户不用 TUN 模式而是系统代理）
+    proxy_url = os.getenv("HTTPS_PROXY") or os.getenv("HTTP_PROXY") or os.getenv("https_proxy") or os.getenv("http_proxy")
+    
+    # 兼容 TUN 模式：TUN 模式在网卡层接管流量，为防止 urllib/httpx 误读残留的失效 proxy 变量
+    # 如果代理变量为空，设置 trust_env=False 强制走直连网卡（即被 TUN 接管）
+    if proxy_url:
+        http_client = httpx.Client(proxy=proxy_url)
+    else:
+        http_client = httpx.Client(trust_env=False)
     
     return ChatOpenAI(
         model="deepseek-chat",
         api_key=SecretStr(raw_api_key),
         base_url=base_url,
         temperature=0, # 路由等任务需要确定性
+        http_client=http_client,
     )
 
 # -----------------------------------------------------------------------------

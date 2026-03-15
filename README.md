@@ -13,7 +13,9 @@
   - [x] 编写 Cypher 语句将萃取的数据成功导入图数据库
   - [x] 测试基础图查询连通性
 
+
 # VentureAgent 补充任务：接入真实 LLM (DeepSeek)
+
 - [x] 切换大语言模型架构
   - [x] 在 [backend/.env](file:///e:/%E5%A4%A7%E4%B8%89%E4%B8%8B/%E5%A4%A7%E6%95%B0%E6%8D%AE%E7%89%B9%E8%89%B2%E8%AF%BE%E7%A8%8B%E6%A8%A1%E5%9D%97/venture_agent/backend/.env) 中配置 DeepSeek API Key
   - [x] 修改 [extract.py](file:///e:/%E5%A4%A7%E4%B8%89%E4%B8%8B/%E5%A4%A7%E6%95%B0%E6%8D%AE%E7%89%B9%E8%89%B2%E8%AF%BE%E7%A8%8B%E6%A8%A1%E5%9D%97/venture_agent/backend/app/ingestion/extract.py)，将 Mock/OpenAI 逻辑替换为基于 DeepSeek API 的真实结构化提取
@@ -22,7 +24,9 @@
   - [x] 引入 `pypdf` 依赖
   - [x] 编写 [extract_from_ppt.py](file:///e:/%E5%A4%A7%E4%B8%89%E4%B8%8B/%E5%A4%A7%E6%95%B0%E6%8D%AE%E7%89%B9%E8%89%B2%E8%AF%BE%E7%A8%8B%E6%A8%A1%E5%9D%97/venture_agent/backend/app/ingestion/extract_from_ppt.py)，实现真实 PDF 目录的遍历、文本加载与结构化抽取入库
 
+
 # VentureAgent Phase 2: Agent 逻辑开发 任务清单
+
 - [x] LangGraph 基础通信框架搭建 (Router)
   - [x] 定义全局状态数据结构 [AgentState](file:///e:/%E5%A4%A7%E4%B8%89%E4%B8%8B/%E5%A4%A7%E6%95%B0%E6%8D%AE%E7%89%B9%E8%89%B2%E8%AF%BE%E7%A8%8B%E6%A8%A1%E5%9D%97/venture_agent/backend/app/agent/graph.py#20-27)
   - [x] 构建负责意图分发的 `Router Node`
@@ -35,4 +39,27 @@
   - [x] 编写前置硬编码约束 (如 H4/H8 商业定律探测策略)
   - [x] 通过终端或 `/api/chat` 完成一次完整的带状态的长程对话测试
 
-注意：目前暂时将记忆存入内存。每一次运行test_graph.py开启一个新的记忆，运行结束后自动释放；或者每一次通过终端开启后端，对应一个新的记忆，终止终端则释放。此外，neo4j中的数据能够检索到，但貌似没有融入LLM的回答中？
+注意：目前暂时将记忆存入内存。每一次运行test_graph.py开启一个新的记忆，运行结束后自动释放；或者每一次通过终端开启后端，对应一个新的记忆，终止终端则释放。此外，neo4j中的数据能够检索到，但貌似没有融入LLM’的回答中？
+
+
+## VentureAgent 补充任务：用户鉴权与数据库持久化
+
+- [x] 登录注册流程接入 Neo4j
+  - [x] 修改 [auth.py](file:///c:/Users/86185/Desktop/2025-2026%E7%AC%AC%E4%BA%8C%E5%AD%A6%E6%9C%9F/%E5%A4%A7%E6%95%B0%E6%8D%AE%E7%89%B9%E8%89%B2%E8%AF%BE%E7%A8%8B/venture%20agent/venture_agent/backend/app/auth.py)，实现基于 Neo4j 的真实 `register` 与 `login` 逻辑
+  - [x] 在注册过程同步录入用户的学校、专业、年级等参赛元数据
+  - [x] 修改 [App.jsx](file:///c:/Users/86185/Desktop/2025-2026%E7%AC%AC%E4%BA%8C%E5%AD%A6%E6%9C%9F/%E5%A4%A7%E6%95%B0%E6%8D%AE%E7%89%B9%E8%89%B2%E8%AF%BE%E7%A8%8B/venture%20agent/venture_agent/frontend/src/App.jsx)，将原本的前端 Mock 认证替换为真实的异步 API 请求
+
+### 运行说明
+1. **数据库配置**：
+   - 确保本地 Neo4j 已启动。
+   - 后端通过 `backend/.env` 读取配置（参考 `backend/.env.example` 模板）。
+   - 默认配置：`NEO4J_URI=bolt://localhost:7687`, `NEO4J_USER=neo4j`, `NEO4J_PASSWORD=password`。
+2. **后端启动**：
+   - 进入 `backend` 目录。
+   - 运行 `python -m app.main`。
+3. **前端启动**：
+   - 进入 `frontend` 目录。
+   - 运行 `npm run dev`。
+   - 浏览器访问 `http://localhost:5173`。
+
+注意：目前暂时将记忆存入内存。每一次通过终端开启后端，对应一个新的记忆，终止终端则释放。此外，neo4j中的数据能够检索到，但后续将进一步优化其在 LLM 回答中的融入。
