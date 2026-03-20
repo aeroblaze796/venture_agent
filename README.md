@@ -1,65 +1,63 @@
-# VentureAgent Phase 1 知识底座建设 (Neo4j 与 数据萃取)
+# VentureAgent 创新创业智能体完善与补全计划 (Phase 3)
 
-- [x] 环境搭建与拓展
-  - [x] 在 [requirements.txt](file:///e:/%E5%A4%A7%E4%B8%89%E4%B8%8B/%E5%A4%A7%E6%95%B0%E6%8D%AE%E7%89%B9%E8%89%B2%E8%AF%BE%E7%A8%8B%E6%A8%A1%E5%9D%97/venture_agent/backend/requirements.txt) 中添加 Neo4j 和 LLM 提取所需的依赖包
-  - [x] 在本地或 Docker 中启动 Neo4j 数据库实例
-- [x] 数据本体定义 (Ontology Schema)
-  - [x] 定义核心节点 (Project, Technology, Market 等) 模型
-  - [x] 定义高阶超边 (Hyperedges) 数据结构与存储模式 (Hyperedge-as-a-Node)
-- [x] 构建数据萃取脚本 (Data Ingestion)
-  - [x] 编写 Python 脚本解析样本预料/案例
-  - [x] 结合 LLM 实现结构化数据提取
-- [x] Neo4j 数据库写入与测试
-  - [x] 编写 Cypher 语句将萃取的数据成功导入图数据库
-  - [x] 测试基础图查询连通性
+## 目标概述
+经过对比《创新创业智能体测试文档.docx》与当前 `venture_agent` 代码库的实现情况，目前系统已实现 **Phase 2** 的基础多智能体通信框架（Router）以及 A1 (Learning Tutor) 和 A2 (Project Coach) 的初步逻辑，并接入了初步的约束引擎和 Neo4j 图查询（GraphRAG）。但距离测试文档的验收标准，仍缺失诸多高级智能体、教师端统计以及结构化输出要求。
 
+本计划将拆解所有未实现或未达标的功能，并提供逐步完成的 Roadmap。
 
-# VentureAgent 补充任务：接入真实 LLM (DeepSeek)
+---
 
-- [x] 切换大语言模型架构
-  - [x] 在 [backend/.env](file:///e:/%E5%A4%A7%E4%B8%89%E4%B8%8B/%E5%A4%A7%E6%95%B0%E6%8D%AE%E7%89%B9%E8%89%B2%E8%AF%BE%E7%A8%8B%E6%A8%A1%E5%9D%97/venture_agent/backend/.env) 中配置 DeepSeek API Key
-  - [x] 修改 [extract.py](file:///e:/%E5%A4%A7%E4%B8%89%E4%B8%8B/%E5%A4%A7%E6%95%B0%E6%8D%AE%E7%89%B9%E8%89%B2%E8%AF%BE%E7%A8%8B%E6%A8%A1%E5%9D%97/venture_agent/backend/app/ingestion/extract.py)，将 Mock/OpenAI 逻辑替换为基于 DeepSeek API 的真实结构化提取
-  - [x] 测试真实的案例抽取能力
-- [x] 构建批量 PDF 商业计划书数据管道
-  - [x] 引入 `pypdf` 依赖
-  - [x] 编写 [extract_from_ppt.py](file:///e:/%E5%A4%A7%E4%B8%89%E4%B8%8B/%E5%A4%A7%E6%95%B0%E6%8D%AE%E7%89%B9%E8%89%B2%E8%AF%BE%E7%A8%8B%E6%A8%A1%E5%9D%97/venture_agent/backend/app/ingestion/extract_from_ppt.py)，实现真实 PDF 目录的遍历、文本加载与结构化抽取入库
+## 1. 已实现与未实现功能对比清单
 
+### ✅ 已实现或初步实现
+- **A1 学习辅导智能体 (Learning Tutor)**: 基础路由和问答已跑通。
+- **A2 项目教练智能体 (Project Coach)**: 已支持防代写、苏格拉底式发问、接入Neo4j查询。
+- **基础通信中枢 (Router & Graph)**: LangGraph 主流程建立，支持意图分发。
+- **Neo4j/知识图谱基础 (GraphRAG)**: 已能提取关键词并在Neo4j检索（对应A3的部分底层能力）。
+- **规则诊断器初版 (Constraints Engine)**: 已有 [constraints.py](file:///e:/%E5%A4%A7%E4%B8%89%E4%B8%8B/%E5%A4%A7%E6%95%B0%E6%8D%AE%E7%89%B9%E8%89%B2%E8%AF%BE%E7%A8%8B%E6%A8%A1%E5%9D%97/venture_agent/backend/app/agent/constraints.py) 能做简单的规则拦截（对应A4基础）。
 
-# VentureAgent Phase 2: Agent 逻辑开发 任务清单
+### ❌ 尚未实现或未达标 (Unimplemented / Incomplete)
+1. **A1-1 结构化输出强校验**: A1输出必须严格包含 6 大字段（Definition, Example, Common Mistakes, Practice Task等），且任务必须为1个。
+2. **A3 谬误识别与超图关联日志**: 现有RAG查询较为简单，未实现对超边（Value_Loop_Edge / Risk_Pattern_Edge）的准确结构化调用与策略库选取生成（需在日志强打印）。
+3. **A4 规则诊断器深度对齐**: 需将 [constraints.py](file:///e:/%E5%A4%A7%E4%B8%89%E4%B8%8B/%E5%A4%A7%E6%95%B0%E6%8D%AE%E7%89%B9%E8%89%B2%E8%AF%BE%E7%A8%8B%E6%A8%A1%E5%9D%97/venture_agent/backend/app/agent/constraints.py) 补充完整以覆盖测试画像中的漏洞（如 ChannelMismatch, UnitEconFail），严格输出 `rule_id, trigger_message, impact, fix_task`。
+4. **A5 竞赛顾问智能体 (Competition Advisor)**: 完全未开发。包括结构化 Rubric 逐项评分（A5-1）以及依据赛事命令动态切换权重与侧重点（A5-2）。此节点需加入 LangGraph 路由。
+5. **A6 教师批改与助手端 (Assessment & Instructor Assistant)**: 完全未开发。包括单项目批改（A6-1）、班级数据汇总洞察（A6-2）、教师反向干预规则配置（A6-3）、多轮对话日志画像提取打分（A6-4）以及系统管理员越权拦截与大盘（A6-5）。
+6. **A7 安全与兜底测试**: 应对乱码、越狱Prompt的情绪化安抚与拉回。
 
-- [x] LangGraph 基础通信框架搭建 (Router)
-  - [x] 定义全局状态数据结构 [AgentState](file:///e:/%E5%A4%A7%E4%B8%89%E4%B8%8B/%E5%A4%A7%E6%95%B0%E6%8D%AE%E7%89%B9%E8%89%B2%E8%AF%BE%E7%A8%8B%E6%A8%A1%E5%9D%97/venture_agent/backend/app/agent/graph.py#20-27)
-  - [x] 构建负责意图分发的 `Router Node`
-  - [x] 接入内存 Checkpointer 实现短时记忆持久化
-- [x] 核心互动节点开发 (A1 & A2)
-  - [x] 构建 `Tutor Node` (A1 学习辅导 Agent)
-  - [x] 构建 `Coach Node` (A2 项目教练 Agent - 毒舌与逻辑粉碎机制)
-- [x] RAG 与图谱安全护栏集成
-  - [x] 将 Neo4j 图谱查询逻辑封装为 Langchain Tool
-  - [x] 编写前置硬编码约束 (如 H4/H8 商业定律探测策略)
-  - [x] 通过终端或 `/api/chat` 完成一次完整的带状态的长程对话测试
+---
 
-注意：目前暂时将记忆存入内存。每一次运行test_graph.py开启一个新的记忆，运行结束后自动释放；或者每一次通过终端开启后端，对应一个新的记忆，终止终端则释放。此外，neo4j中的数据能够检索到，但貌似没有融入LLM’的回答中？
+## 2. 逐步完成计划清单 (Step-by-Step Implementation Plan)
 
+为了稳步通过所有测试用例（A1.1验收标准），建议按以下 **4个冲刺阶段 (Sprints)** 逐步推进：
 
-## VentureAgent 补充任务：用户鉴权与数据库持久化
+### 阶段一：完善学生端核心体验及诊断 (A1, A3, A4 对齐)
+> **目标**：让单点对话体验无懈可击，诊断精准且不产生幻觉（能完美通过 D001-D004 画像对话）。
+- **步骤 1.1 (已完成)**: 更新 [learning_tutor_node](file:///e:/%E5%A4%A7%E4%B8%89%E4%B8%8B/%E5%A4%A7%E6%95%B0%E6%8D%AE%E7%89%B9%E8%89%B2%E8%AF%BE%E7%A8%8B%E6%A8%A1%E5%9D%97/venture_agent/backend/app/agent/graph.py#93-126) 提示词，通过结构化输出（Structured Output）强制保障输出 6 大字段，并在逻辑层 `count("Practice Task") == 1`。
+- **步骤 1.2**: 升级 [constraints.py](file:///e:/%E5%A4%A7%E4%B8%89%E4%B8%8B/%E5%A4%A7%E6%95%B0%E6%8D%AE%E7%89%B9%E8%89%B2%E8%AF%BE%E7%A8%8B%E6%A8%A1%E5%9D%97/venture_agent/backend/app/agent/constraints.py) (A4 Rule Checker)，增加针对 D001（无人机农村配送：渠道错位、单位经济差）、D002（木雕盲盒出海：合规缺口、资源脱节）的特定规则匹配逻辑，规范输出为 JSON 格式 `[rule_id, trigger_message, impact, fix_task]`。
+- **步骤 1.3**: 重构 [tools.py](file:///e:/%E5%A4%A7%E4%B8%89%E4%B8%8B/%E5%A4%A7%E6%95%B0%E6%8D%AE%E7%89%B9%E8%89%B2%E8%AF%BE%E7%A8%8B%E6%A8%A1%E5%9D%97/venture_agent/backend/app/agent/tools.py) 的图谱查询能力 (A3)。在查询 Neo4j 时，支持异构检索并在 `print()` 日志中显示 `retrieved_heterogeneous_subgraph`，建立多套压测策略问答模版。
 
-- [x] 登录注册流程接入 Neo4j
-  - [x] 修改 [auth.py](file:///c:/Users/86185/Desktop/2025-2026%E7%AC%AC%E4%BA%8C%E5%AD%A6%E6%9C%9F/%E5%A4%A7%E6%95%B0%E6%8D%AE%E7%89%B9%E8%89%B2%E8%AF%BE%E7%A8%8B/venture%20agent/venture_agent/backend/app/auth.py)，实现基于 Neo4j 的真实 `register` 与 `login` 逻辑
-  - [x] 在注册过程同步录入用户的学校、专业、年级等参赛元数据
-  - [x] 修改 [App.jsx](file:///c:/Users/86185/Desktop/2025-2026%E7%AC%AC%E4%BA%8C%E5%AD%A6%E6%9C%9F/%E5%A4%A7%E6%95%B0%E6%8D%AE%E7%89%B9%E8%89%B2%E8%AF%BE%E7%A8%8B/venture%20agent/venture_agent/frontend/src/App.jsx)，将原本的前端 Mock 认证替换为真实的异步 API 请求
+### 阶段二：开发竞赛顾问与动态评分 (A5)
+> **目标**：实现严厉的虚拟评委打分制，并支持基于赛事类型（互联网+ vs 挑战杯）动态切换视角。
+- **步骤 2.1**: 在 [agent/graph.py](file:///e:/%E5%A4%A7%E4%B8%89%E4%B8%8B/%E5%A4%A7%E6%95%B0%E6%8D%AE%E7%89%B9%E8%89%B2%E8%AF%BE%E7%A8%8B%E6%A8%A1%E5%9D%97/venture_agent/backend/app/agent/graph.py) 中新注册 `competition_advisor_node`，并在 Router 中增加判别此意图的逻辑。
+- **步骤 2.2**: 建立 `rubrics.py`，内置 10+ 项底层评分维度标准。
+- **步骤 2.3**: 研发 **赛事动态权重切换引擎**，通过识别用户指令中的赛事关键字，为 LLM 注入不同的 Weight 配置与系统提示词组合。
+- **步骤 2.4**: 通过 Pydantic 约束 `competition_advisor_node` 的返回结构，确保每个指标项都有 `Estimated Score`, `Missing Evidence`, `24h Fix` 和 `72h Fix`。
 
-### 运行说明
-1. **数据库配置**：
-   - 确保本地 Neo4j 已启动。
-   - 后端通过 `backend/.env` 读取配置（参考 `backend/.env.example` 模板）。
-   - 默认配置：`NEO4J_URI=bolt://localhost:7687`, `NEO4J_USER=neo4j`, `NEO4J_PASSWORD=password`。
-2. **后端启动**：
-   - 进入 `backend` 目录。
-   - 运行 `python -m app.main`。
-3. **前端启动**：
-   - 进入 `frontend` 目录。
-   - 运行 `npm run dev`。
-   - 浏览器访问 `http://localhost:5173`。
+### 阶段三：开发教师端统计与管理功能 (A6 后台建设)
+> **目标**：走出单体对话，赋能教师管控与大班级数据洞察视角。
+- **步骤 3.1**: 构建 `/api/instructor/evaluate` 接口 (A6-1)，利用已有的 A5 评分逻辑，生成面向老师的评审附注（Review Notes）及证据链（Evidence Trace）。
+- **步骤 3.2**: 构建班级图谱统计接口 `/api/instructor/class_insight` (A6-2)，将收集的各项目 JSON 数据做聚合，计算 Top 5 Mistakes 及点亮率。
+- **步骤 3.3**: 在后端鉴权模块（如 [auth.py](file:///e:/%E5%A4%A7%E4%B8%89%E4%B8%8B/%E5%A4%A7%E6%95%B0%E6%8D%AE%E7%89%B9%E8%89%B2%E8%AF%BE%E7%A8%8B%E6%A8%A1%E5%9D%97/venture_agent/backend/app/auth.py)）增加 RBAC 权限系统 (A6-5)，区分 `student`, `instructor`, `admin`。编写拦截中间件，提供全局统计 Dashboard API。
+- **步骤 3.4**: 建立并打通 **动态对话能力画像分析逻辑 (A6-4)**，通过拉取 Checkpointer（Sqlite/Memory）中的最近 N 轮历史记录，交由 LLM 生成五维雷达图数据与具体引用的溯源评价。
+- **步骤 3.5**: 增加教师端动态规则配置表，支持将干预逻辑下发，合并至 A2 发问的 Context 中 (A6-3)。
 
-注意：目前暂时将记忆存入内存。每一次通过终端开启后端，对应一个新的记忆，终止终端则释放。此外，neo4j中的数据能够检索到，但后续将进一步优化其在 LLM 回答中的融入。
+### 阶段四：安全兜底护栏与端到端闭环测试 (A7, A8)
+> **目标**：查漏补缺，防御恶意注入，跑通整体验收。
+- **步骤 4.1**: 在 LangGraph [router_node](file:///e:/%E5%A4%A7%E4%B8%89%E4%B8%8B/%E5%A4%A7%E6%95%B0%E6%8D%AE%E7%89%B9%E8%89%B2%E8%AF%BE%E7%A8%8B%E6%A8%A1%E5%9D%97/venture_agent/backend/app/agent/graph.py#64-89) 的前端或入口处，增加 `input_sanitization`。应对恶意越狱指令与纯乱码，强制输出兜底话术 (A7)。
+- **步骤 4.2**: 对整个链路生成的所有涉及策略、预测的信息结果自动在末尾拼接：“AI生成，仅供参考”免责条款。
+- **步骤 4.3**: 使用 D001-D005 测试库进行全自动化冒烟脚本测试，验证 100% 满足测试用例文档的验收要求。准备好迎接 D006/D007 盲测。
+
+---
+
+## 接下来该做什么？
+你可以根据这份计划清单，告诉我先从哪一步开始实施。推荐从 **阶段一（A1, A3, A4 对齐）** 开始，对现有逻辑进行强化和改造！

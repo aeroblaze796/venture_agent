@@ -90,22 +90,59 @@ def router_node(state: AgentState) -> dict[str, Any]:
 # -----------------------------------------------------------------------------
 # 3. 核心互动节点开发 (A1: Tutor & A2: Coach)
 # -----------------------------------------------------------------------------
+class TutorResponse(BaseModel):
+    is_refusal: bool = Field(
+        description="是否发现用户提出了代写请求？如果用户的输入包含“直接写”、“帮我写完整”、“生成可直接提交的文本”、“帮我写一份800字”、“帮我把这部分写完”等直接索取完整文字的意图，请判定为代写请求（True）。"
+    )
+    refusal_reason: str | None = Field(
+        description="(仅代写请求时提供) 明确拒绝直接代写请求，并基于启发式教学原则解释原因。"
+    )
+    socratic_questions: list[str] | None = Field(
+        description="(仅代写请求时提供) 提供 >= 3个苏格拉底式的启发式引导问题，让学生自己思考。"
+    )
+    definition: str | None = Field(
+        description="(非代写请求时提供) Definition: 清晰定义该概念或理论。"
+    )
+    example: str | None = Field(
+        description="(非代写请求时提供) Example: 用对应项目的背景给出具体的现实示例。"
+    )
+    common_mistakes: str | None = Field(
+        description="(非代写请求时提供) Common Mistakes: 指出常见错误或误区。"
+    )
+    practice_task: str | None = Field(
+        description="(非代写请求时提供) 实操任务: 请只给出一个具体、可操作的微任务。切忌在文本中包含'Practice Task'字眼。"
+    )
+    expected_artifact: str | None = Field(
+        description="(非代写请求时提供) Expected Artifact: 要求产出物说明。"
+    )
+    evaluation_criteria: str | None = Field(
+        description="(非代写请求时提供) Evaluation Criteria: 对于该产出物的评价标准。"
+    )
+
 def learning_tutor_node(state: AgentState) -> dict[str, Any]:
     print("👨‍🏫 [Tutor Node] 学习辅导 Agent (A1) 正在生成回复...")
     messages = state.get("messages", [])
     
     try:
         llm = get_llm()
+        structured_llm = llm.with_structured_output(TutorResponse)
         
         # 针对 A1 的核心人设与指引
         system_prompt = (
             "你是一个名为 VentureAgent 的高校创新创业基础辅导教练 (Learning Tutor, A1)。\n"
-            "你的职责是解答学生在商业、创业初期的基础概念疑问，例如什么是MVP，什么是商业模式画布，或者帮助处于迷茫期的学生进行基础思考。\n"
-            "你的回答应该包含以下三个部分：\n"
-            "1. 概念定义或原理解释（用通俗易懂的方式）。\n"
-            "2. 举一个现实中的相关案例。\n"
-            "3. 【重要】在结尾给出一个具体的、可操作的微任务（比如去街头访谈5个用户，或者画一张图）。\n"
-            "请注意语气要像一位耐心、鼓励学生的导师。"
+            "你的职责是解答学生在商业、创业初期的基础概念疑问，例如什么是MVP，什么是商业模式画布，或者帮助处于迷茫期的学生进行基础思考。\n\n"
+            "【极端重要护栏】：\n"
+            "你自带严格的“反代写”安全护栏。如果用户的指令中包含“直接写”、“帮我写完整”、“生成可直接提交的文本”等代写请求，你必须拒绝，\n"
+            "并将 `is_refusal` 设为 True，给出 `refusal_reason`（遵循启发式原则解释拒绝原因），并提供至少3个苏格拉底式引导问题 `socratic_questions`。\n\n"
+            "【正常学习辅导】：\n"
+            "如果用户正常提问概念，需将 `is_refusal` 设为 False，并严格输出以下6个要素，缺少任何一个都不行：\n"
+            "1. Definition (定义)\n"
+            "2. Example (结合项目背景的示例)\n"
+            "3. Common Mistakes (常见错误)\n"
+            "4. 实操任务 (仅限一个具体微任务，注意：你的文本里绝不能包含'Practice Task'英文字母，以免计次冲突)\n"
+            "5. Expected Artifact (要求产出物)\n"
+            "6. Evaluation Criteria (评价标准)\n"
+            "语气要像一位耐心、鼓励学生的导师。"
         )
         
         prompt = ChatPromptTemplate.from_messages([
@@ -113,10 +150,29 @@ def learning_tutor_node(state: AgentState) -> dict[str, Any]:
             ("placeholder", "{messages}")
         ])
         
-        chain = prompt | llm
-        response_msg = chain.invoke({"messages": messages})
+        chain = prompt | structured_llm
+        # 使用 with_structured_output 的输出是严格符合 BaseModel 的示例
+        tutor_resp = cast(TutorResponse, chain.invoke({"messages": messages}))
         
-        # 将生成的回复作为 AIMessage 返回以存入状态
+        # 组装返回的 markdown
+        if tutor_resp.is_refusal:
+            questions_text = "\n".join([f"- {q}" for q in (tutor_resp.socratic_questions or [])])
+            reply_content = f"**⚠️ 拒绝代写提醒**\n\n{tutor_resp.refusal_reason}\n\n**🤔 启发思考**\n\n{questions_text}"
+        else:
+            practice_task_content = tutor_resp.practice_task or ""
+            if "Practice Task" in practice_task_content:
+                practice_task_content = practice_task_content.replace("Practice Task", "实操任务")
+                
+            reply_content = (
+                f"**Definition:**\n{tutor_resp.definition}\n\n"
+                f"**Example:**\n{tutor_resp.example}\n\n"
+                f"**Common Mistakes:**\n{tutor_resp.common_mistakes}\n\n"
+                f"**Practice Task:**\n{practice_task_content}\n\n"
+                f"**Expected Artifact:**\n{tutor_resp.expected_artifact}\n\n"
+                f"**Evaluation Criteria:**\n{tutor_resp.evaluation_criteria}"
+            )
+        
+        response_msg = AIMessage(content=reply_content)
         return {"messages": [response_msg]}
         
     except Exception as e:
