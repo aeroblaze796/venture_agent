@@ -61,6 +61,19 @@ def init_db():
     )
     """)
 
+    # 5. 消息 (Messages) 表
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        conversation_id TEXT NOT NULL,
+        role TEXT NOT NULL,
+        agent TEXT,
+        content TEXT NOT NULL,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (conversation_id) REFERENCES conversations(id)
+    )
+    """)
+
     # 6. 成员表 (Phase 4 & 5)
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS members (
