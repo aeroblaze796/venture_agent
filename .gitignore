@@ -1,5 +1,3 @@
-# 忽略规则
-
 # 环境变量
 .env
 *.env
@@ -8,16 +6,3 @@
 *.db
 *.sqlite
 
-# Python 缓存
-__pycache__/
-*.py[cod]
-*.pyo
-
-# 前端依赖与构建
-node_modules/
-dist/
-.vite/
-
-# 系统文件
-.DS_Store
-Thumbs.db
