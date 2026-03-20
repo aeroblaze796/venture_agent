@@ -85,3 +85,45 @@
 - **`frontend/src/pages/StudentWorkspace.jsx`**:
     - **加固 Header 渲染**：将 `localeData.monthsShort()` 替换为 `value.format('MMM')`。前者在某些环境下可能因 AntD/Moment 版本差异导致运行时崩溃，后者则更为稳健。
     - **优化 Select 绑定**：移除了冗余的 `String()` 转换，直接利用 `Select.Option` 的 `value` 属性进行数值匹配，提升了渲染效率与稳定性。
+
+## [2026-03-20] 阶段四与五：成员管理、3.5 栏架构与实机文件解析
+
+### 1. 修改文件清单
+- **`backend/app/database.py`**:
+    - 升级 `projects` 表，新增 `competition`, `track`, `college`, `advisor_name`, `advisor_info` 字段。
+    - 新增 `members` 表，存储团队成员姓名、角色、职位与简介。
+- **`backend/app/main.py`**:
+    - 新增 `POST /api/projects`：支持多步申报表单的全量数据入库。
+    - **[NEW] `POST /api/projects/import`**: 集成 `pypdf` 与 `python-docx`，支持计划书实机解析并提取文本。
+- **`frontend/src/pages/StudentWorkspace.jsx`**:
+    - **UI 重构**：实现 3.5 栏弹性布局。侧边栏回归“图标+中英文”双语标识，增强视觉引导。
+    - **功能升级**：
+        - 项目中心按钮优化为纵向立体布局（发起 vs 导入）。
+        - “发起项目”升级为 3 步分步引导表单。
+        - “导入项目”实装文件上传解析流，直接将内容注入编辑器。
+    - **编辑器增强**：主干区域增加 `editor-surface` 白盒描边，视觉层级更清晰。
+    - **成员管理**：右侧控制台实装成员列表与点击触发的详细信息 Popover。
+- **`frontend/src/pages/VentureDashboard.css`**:
+    - 定义 `.nav-rail` 深度背景与 `.nav-item.active` 立体阴影。
+    - 优化 `.btn-new-chat` 与 `.btn-import-project` 的纵向堆叠美学。
+    - 补全 `.editor-surface` 及其浮动投影样式。
+
+### 2. 核心成果
+- 实现了从“计划书导入 -> AI 解析内容 -> 结构化管理团队”的高级业务闭环。
+- 侧边栏交互感回归，符合双创项目管理的高效直觉。
+- 奠定了“以编辑器为中心”的 3.5 栏专业工作空间格局。
+## [2026-03-20] 阶段六：项目生命周期管理逻辑闭环 (CRUD)
+
+### 1. 修改文件清单
+- **`backend/app/main.py`**:
+    - 新增 `PATCH /api/projects/{id}`：支持侧边栏项目名实时重命名。
+    - 新增 `DELETE /api/projects/{id}`：实现具备级联删除能力的物理移除（同步清理成员、DDL、日志）。
+- **`frontend/src/pages/StudentWorkspace.jsx`**:
+    - **交互升级**：为项目侧边栏引入 `Edit` 与 `Delete` 快捷操作图标。
+    - **行内编辑**：实装 `editingProjectId` 状态机，点击编辑直接原地弹出输入框，支持 `Enter` 即时确认。
+    - **安全删除**：接入 `Popconfirm` 气泡确认框，防止误删，并实现删除后的全局看板自动重刷。
+
+### 2. 核心成果
+- 补齐了项目管理的最后一块拼图：全生命周期的 CRUD 操纵。
+- 保证了数据层面的强一致性，删除项目即刻清理其产生的所有冗余 DDL 与日志。
+- 交互体验对齐 AI 会话管理，保持了全站设计语言的高度统一。

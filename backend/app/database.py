@@ -1,6 +1,7 @@
 import sqlite3
 import os
 from datetime import datetime
+from typing import Optional
 
 # 数据库文件路径
 DB_PATH = os.path.join(os.path.dirname(__file__), "venture.db")
@@ -9,13 +10,19 @@ def init_db():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
-    # 1. 项目表
+    # 1. 项目表 (扩展阶段)
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS projects (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
         description TEXT,
         owner_id TEXT,
+        competition TEXT,    -- 所属比赛
+        track TEXT,          -- 赛道
+        college TEXT,        -- 所属书院/学院
+        advisor_name TEXT,   -- 指导老师姓名
+        advisor_info TEXT,   -- 指导老师简介
+        content TEXT,        -- 项目计划书正文 (解析后内容)
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
     """)
@@ -54,16 +61,31 @@ def init_db():
     )
     """)
 
-    # 5. 消息 (Messages) 表
+    # 6. 成员表 (Phase 4 & 5)
     cursor.execute("""
-    CREATE TABLE IF NOT EXISTS messages (
+    CREATE TABLE IF NOT EXISTS members (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        conversation_id TEXT NOT NULL,
-        role TEXT NOT NULL, -- 'user' or 'coach'
-        agent TEXT,        -- Agent 名称 (如 项目教练)
+        project_id INTEGER,
+        name TEXT NOT NULL,
+        student_id TEXT,    -- 学号
+        position TEXT,      -- 职务
+        college TEXT,       -- 学院
+        major TEXT,         -- 专业
+        grade TEXT,         -- 年级
+        info TEXT,          -- 个人背景
+        FOREIGN KEY (project_id) REFERENCES projects(id)
+    )
+    """)
+
+    # 7. 项目提交日志 (Commits)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS project_commits (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id INTEGER,
         content TEXT NOT NULL,
+        author TEXT,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (conversation_id) REFERENCES conversations(id)
+        FOREIGN KEY (project_id) REFERENCES projects(id)
     )
     """)
 
@@ -93,6 +115,45 @@ def init_db():
     conn.commit()
     conn.close()
 
+def migrate_db():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(projects)")
+    existing_cols = [row[1] for row in cursor.fetchall()]
+    new_cols = [
+        ("competition", "TEXT"), ("track", "TEXT"), ("college", "TEXT"),
+        ("advisor_name", "TEXT"), ("advisor_info", "TEXT")
+    ]
+    for col_name, col_type in new_cols:
+        if col_name not in existing_cols:
+            cursor.execute(f"ALTER TABLE projects ADD COLUMN {col_name} {col_type}")
+    
+    # 增加 content 列
+    cursor.execute("PRAGMA table_info(projects)")
+    if "content" not in [row[1] for row in cursor.fetchall()]:
+        cursor.execute("ALTER TABLE projects ADD COLUMN content TEXT")
+    
+    # 更新 members 表 (平滑迁移)
+    cursor.execute("PRAGMA table_info(members)")
+    mem_cols = [row[1] for row in cursor.fetchall()]
+    for col_name, col_type in [("student_id", "TEXT"), ("college", "TEXT"), ("major", "TEXT"), ("grade", "TEXT")]:
+        if col_name not in mem_cols:
+            cursor.execute(f"ALTER TABLE members ADD COLUMN {col_name} {col_type}")
+
+    # 创建项目日志表
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS project_commits (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id INTEGER,
+        content TEXT NOT NULL,
+        author TEXT,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (project_id) REFERENCES projects(id)
+    )
+    """)
+    conn.commit()
+    conn.close()
+
 def get_dashboard_data(user_id: str):
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -104,25 +165,45 @@ def get_dashboard_data(user_id: str):
     
     if not projects_rows:
         conn.close()
-        return None
+        return {
+            "projects": [],
+            "deadlines": [],
+            "evolution_logs": [],
+            "members": []
+        }
     
     projects = [dict(p) for p in projects_rows]
     project_ids = [p['id'] for p in projects]
     placeholders = ','.join(['?'] * len(project_ids))
     
-    # 2. 聚合这些项目下的所有 DDL
-    cursor.execute(f"SELECT title, due_date FROM deadlines WHERE project_id IN ({placeholders})", project_ids)
+    # 2. 聚合这些项目下的所有 DDL (带项目名)
+    cursor.execute(f"""
+        SELECT d.title, d.due_date, p.name as project_name 
+        FROM deadlines d 
+        JOIN projects p ON d.project_id = p.id 
+        WHERE d.project_id IN ({placeholders})
+    """, project_ids)
     ddls = [dict(row) for row in cursor.fetchall()]
     
     # 3. 获取所有项目的演进日志
     cursor.execute(f"SELECT event, timestamp FROM evolution_logs WHERE project_id IN ({placeholders}) ORDER BY timestamp DESC", project_ids)
     logs = [dict(row) for row in cursor.fetchall()]
+
+    # 4. 获取项目成员 (Phase 4)
+    cursor.execute(f"SELECT * FROM members WHERE project_id IN ({placeholders})", project_ids)
+    members = [dict(row) for row in cursor.fetchall()]
+    
+    # 5. 获取项目提交日志 (Commits)
+    cursor.execute(f"SELECT * FROM project_commits WHERE project_id IN ({placeholders}) ORDER BY timestamp DESC", project_ids)
+    commits = [dict(row) for row in cursor.fetchall()]
     
     conn.close()
     return {
         "projects": projects,
         "deadlines": ddls,
-        "evolution_logs": logs
+        "evolution_logs": logs,
+        "members": members,
+        "commits": commits
     }
 
 # --- 会话管理函数 ---
@@ -145,7 +226,7 @@ def get_conversation_messages(conv_id: str):
     conn.close()
     return [dict(row) for row in rows]
 
-def save_message(conv_id: str, role: str, content: str, agent: str = None):
+def save_message(conv_id: str, role: str, content: str, agent: Optional[str] = None):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     # 自动创建不存在的会话 (简单逻辑)
@@ -189,4 +270,5 @@ def delete_conversation(conv_id: str):
 
 if __name__ == "__main__":
     init_db()
-    print(f"Database initialized at {DB_PATH}")
+    migrate_db()
+    print(f"Database initialized and migrated at {DB_PATH}")
