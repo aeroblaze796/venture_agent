@@ -1,0 +1,87 @@
+# VentureAgent 开发历史记录 (History.txt)
+
+## [2026-03-20] 阶段二：后端联调与数据同步重构
+
+### 1. 修改文件清单
+- **[NEW] `backend/app/database.py`**:
+    - 初始化 SQLite 数据库 (`venture.db`)。
+    - 定义 `projects`, `deadlines`, `evolution_logs` 表结构。
+    - 提供 `get_dashboard_data` 同步接口逻辑。
+- **`backend/app/main.py`**:
+    - 新增 `/api/sync/dashboard` 接口，支持日历与项目动态的后端下发。
+    - 升级 `/api/chat` 接口，回传 `agent` 真实身份名称。
+- **`frontend/src/pages/StudentWorkspace.jsx`**:
+    - **UI 增强**：Nav Rail 导航项添加中英文标签；新增“新建对话”按钮。
+    - **交互增强**：实装 `history` 状态管理，支持动态生成会话条目。
+    - **同步增强**：接入 `syncData` 逻辑，日历 DDL 与项目演进轨迹实现数据库驱动。
+- **`frontend/src/pages/VentureDashboard.css`**:
+    - 为新版侧边栏、中英文标签及“新建对话”按钮渲染专业视觉样式。
+
+### 2. 核心成果
+- 实现了“项目创建 -> 自动生成 DDL -> 前端日历实时标记”的闭环。
+- 完成了 AI 导师意图自动路由（A1/A2）与侧栏多会话并存的功能雏形。
+- 数据从内存 Mock 成功迁移至文件型持久化层 (SQLite)。
+
+## [2026-03-20] 阶段二：多会话管理与消息持久化增强
+
+### 1. 修改文件清单
+- **`backend/app/database.py`**:
+    - 新增 `conversations`（会话表）与 `messages`（消息表）。
+    - 实现 `get_conversations`, `get_conversation_messages`, `save_message`, `rename_conversation`, `delete_conversation` 等 CRUD 函数。
+- **`backend/app/main.py`**:
+    - 暴露会话管理的 RESTful 接口（GET /api/conversations, PATCH, DELETE 等）。
+    - 在 `/api/chat` 逻辑中加入消息双向持久化：用户提问与 AI 回复均实时写入数据库。
+- **`frontend/src/pages/StudentWorkspace.jsx`**:
+    - **逻辑重构**：引入 `activeSessionId` 状态隔离会话；`useEffect` 挂载时按需请求历史列表及首个会话的消息。
+    - **交互补全**：
+        - 历史项右侧新增“编辑”与“删除”按钮。
+        - 实现行内重命名模式（Input + 确认/取消按钮）。
+        - 点击历史项实时切换 `chatLog` 内容，实现真正的多线对话。
+
+### 2. 核心成果
+- 解决了“切换历史记录不改变聊天内容”的问题，实现会话级隔离。
+- 提供了完整的会话生命周期管理（新建、重命名、切换、删除）。
+- 后端具备了对历史消息的结构化查询能力。
+
+## [2026-03-20] 阶段二：看板全量同步、日历增强与持久化修复
+
+### 1. 修改文件清单
+- **`backend/app/database.py`**:
+    - 升级 `get_dashboard_data`：从获取单个项目 DDL 改为获取用户名下所有项目的全量 DDL 与演进日志。
+    - 新增 `create_conversation` 函数：支持在创建会话的同时插入初始欢迎语。
+- **`backend/app/main.py`**:
+    - 新增 `POST /api/conversations` 接口，支持前端初始化会话与欢迎语。
+- **[NEW] `backend/app/view_db.py`**:
+    - **数据库观测工具**：提供一个可在终端运行的脚本，以表格形式清晰展示 SQLite 中所有表的数据，解压 Neo4j UI 的替代方案。
+- **`frontend/src/pages/StudentWorkspace.jsx`**:
+    - **日历组件深度定制**：
+        - 实现了左右翻页切换月份/年份的功能（通过自定义 `headerRender`）。
+        - 视觉升级：由红点点缀改为**黄色背景块高亮** (`bg-amber-100`)，更符合双创节点提醒的视觉优先级。
+    - **持久化链路补齐**：`handleNewChat` 现在会立即调用后端 API 存储欢迎语，解决切换会话后欢迎语消失的 Bug。
+    - **看板适配**：同步适配后端下发的 `projects` 列表数据。
+
+### 2. 核心成果
+- 实现了跨项目节点的聚合提醒，看板视角更加全局化。
+- 完善了 SQLite 的可视化观测手段。
+- 修复了新建会话的状态丢失问题，交互闭环更加稳固。
+
+## [2026-03-20] 阶段二：日历体验极致优化与消息中心预研
+
+### 1. 修改文件清单
+- **`frontend/src/pages/StudentWorkspace.jsx`**:
+    - **Header 逻辑修复**：修正了 `months` 数组生成逻辑，解决了月份选择器全部显示为 "Mars" 的 Bug。
+    - **跨月日期样式**：在日历中为非本月日期增加了灰色半透明背景 (`bg-gray-50/50`) 与低不透明度处理，视觉区分度显著提升。
+    - **消息中心集成**：
+        - 为右上角“铃铛”图标增加了 `Popover` 弹出层。
+        - 内部集成 `List` 组件展示模拟通知（如“项目立项”、“DDL 预警”等）。
+        - 预留了消息数据接口，方便后续对接实时通知流。
+
+### 2. 核心成果
+- 解决了日历交互的关键易用性 Bug。
+- 建立了全局消息触达的 UI 基础。
+
+## [2026-03-20] 紧急修复：白屏问题处理 (Hotfix)
+
+- **`frontend/src/pages/StudentWorkspace.jsx`**:
+    - **加固 Header 渲染**：将 `localeData.monthsShort()` 替换为 `value.format('MMM')`。前者在某些环境下可能因 AntD/Moment 版本差异导致运行时崩溃，后者则更为稳健。
+    - **优化 Select 绑定**：移除了冗余的 `String()` 转换，直接利用 `Select.Option` 的 `value` 属性进行数值匹配，提升了渲染效率与稳定性。
