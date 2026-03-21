@@ -1,22 +1,17 @@
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 import pypdf
 import docx
 from pydantic import BaseModel
 from app.auth import auth_router
-from fastapi.staticfiles import StaticFiles
-import os
-import uuid
-import shutil
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 app = FastAPI(
     title="VentureAgent API",
     description="VentureAgent MVP Backend API",
     version="0.1.0",
 )
-
-os.makedirs("uploads", exist_ok=True)
-app.mount("/api/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # 配置 CORS，允许前端应用跨域访问
 app.add_middleware(
@@ -238,53 +233,27 @@ def create_project_endpoint(project: ProjectCreateRequest):
     return {"status": "ok", "project_id": project_id}
 
 @app.post("/api/projects/import")
-async def import_project_file(
-    file: UploadFile = File(...),
-    project_id: Optional[int] = Form(None)
-):
+async def import_project_file(file: UploadFile = File(...)):
     content = ""
     filename = file.filename
-    unique_filename = f"{uuid.uuid4().hex}_{filename}"
-    upload_path = os.path.join("uploads", unique_filename)
-    
     try:
-        # 保存物理文件
-        with open(upload_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-            
-        # 重新打开提取文本
         if filename.endswith(".pdf"):
-            with open(upload_path, "rb") as pdf_file:
-                pdf_reader = pypdf.PdfReader(pdf_file)
-                for page in pdf_reader.pages:
-                    text = page.extract_text()
-                    if text:
-                        content += text + "\n"
+            pdf_reader = pypdf.PdfReader(file.file)
+            for page in pdf_reader.pages:
+                text = page.extract_text()
+                if text:
+                    content += text + "\n"
         elif filename.endswith(".docx"):
-            with open(upload_path, "rb") as doc_file:
-                doc = docx.Document(doc_file)
-                for para in doc.paragraphs:
-                    content += para.text + "\n"
+            from io import BytesIO
+            doc = docx.Document(BytesIO(await file.read()))
+            for para in doc.paragraphs:
+                content += para.text + "\n"
         else:
             return {"error": "Unsupported file format. Please upload PDF or DOCX."}
-            
-        file_url = f"http://localhost:8000/api/uploads/{unique_filename}"
-        
-        # 如果携带了 project_id，自动绑定附件
-        if project_id is not None:
-            import sqlite3
-            from app.database import DB_PATH
-            conn = sqlite3.connect(DB_PATH)
-            cur = conn.cursor()
-            cur.execute("INSERT INTO project_files (project_id, filename, file_url) VALUES (?, ?, ?)",
-                        (project_id, filename, file_url))
-            conn.commit()
-            conn.close()
-            
     except Exception as e:
         return {"error": f"Failed to parse file: {str(e)}"}
     
-    return {"text": content, "filename": filename, "file_url": file_url}
+    return {"text": content, "filename": filename}
 
 class CommitRequest(BaseModel):
     content: str
@@ -304,48 +273,25 @@ def create_commit(project_id: int, request: CommitRequest):
 
 @app.post("/api/projects/{project_id}/review")
 def review_project(project_id: int):
-    import sqlite3
-    from app.database import DB_PATH
-    from app.agent.graph import get_llm
-    from langchain_core.prompts import ChatPromptTemplate
-    
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("SELECT name, content, competition, track FROM projects WHERE id=?", (project_id,))
-        row = cursor.fetchone()
-        conn.close()
-        
-        if not row:
-            return {"review": "❌ 未找到对应项目，请确认项目是否已成功创建。"}
-            
-        proj_name, proj_content, competition, track = row
-        content_preview = proj_content[:15000] if proj_content else "暂无正文内容"
-        
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", "你是一个资深的双创（创新创业）评委和导师。请你根据学生提交的项目内容，给出【真实、犀利、结构化】的深度评审与文案修改建议。\n\n"
-                       "你的报告需要包括（必须使用标题分点）：\n"
-                       "1. **核心逻辑评判**：评估想法的落地性和痛点真实性\n"
-                       "2. **赛道与合规评估**：针对于比赛要求找寻盲点\n"
-                       "3. **痛点与风险预警**：寻找可能存在的竞争风险与技术护城河缺陷\n"
-                       "4. **AI 文案修改建议**：摘录部分原文，直接给出详细的「修改建议文案」\n\n"
-                       "请使用 Markdown 格式输出，排版清晰大气，语气专业犀利，给出切实的指导意见。"),
-            ("human", "项目名称：{proj_name}\n目标赛事：{competition} - {track}\n\n=== 计划书正文片段 ===\n{content_preview}\n====================\n\n请输出你的深度诊断评估与改写建议：")
-        ])
-        
-        llm = get_llm()
-        chain = prompt | llm
-        result = chain.invoke({
-            "proj_name": proj_name,
-            "competition": competition,
-            "track": track,
-            "content_preview": content_preview
-        })
-        return {"review": result.content}
-        
-    except Exception as e:
-        print(f"DeepSeek review failed: {e}")
-        return {"review": f"⚠️ 诊断请求失败，请检查网络或 API_KEY 配置。详细错误：{str(e)}"}
+    # 此处未来可接入真正的 AI 评审逻辑
+    review_text = """【VentureAgent AI 深度评审报告】
+
+## 一、 核心价值评估 (Score: 88/100)
+- **创新性 (优)**: 项目利用真菌菌丝体替代传统塑料，具有极强的环保属性和市场差异化。
+- **商业模式 (良)**: 闭环逻辑清晰，但初期 B 端客户的获取成本 (CAC) 需进一步调研。
+
+## 二、 赛道对齐建议
+- **互联网+ 赛道**: 建议强化“科技成果转化”背景，突出实验室专利授权。
+- **挑战杯 赛道**: 需增加更多的社会价值调研数据（如碳中和贡献度）。
+
+## 三、 团队背景画像
+- 成员涵盖算法、生物材料与市场策划，结构合理。建议增加一名财务背景成员负责投融资模型。
+
+## 四、 综合改进指导
+1. **风险控制**: 细化真菌培养过程中对温湿度的敏感性控制方案。
+2. **市场推广**: 建议从高端化妆品外包装切入，利用长尾效应建立品牌认知。
+"""
+    return {"review": review_text}
 
 class UpdateContentRequest(BaseModel):
     content: str

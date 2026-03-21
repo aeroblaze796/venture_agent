@@ -28,19 +28,7 @@ import {
   GlobalOutlined,
   BulbOutlined,
   EnvironmentOutlined,
-  NotificationOutlined,
-  CheckCircleOutlined,
-  ClockCircleOutlined,
-  LineChartOutlined,
-  AudioOutlined,
-  HourglassOutlined,
-  PlayCircleOutlined,
-  PauseCircleOutlined,
-  WarningOutlined,
-  FolderOpenOutlined,
-  FileWordOutlined,
-  FilePdfOutlined,
-  FileSearchOutlined
+  NotificationOutlined
 } from "@ant-design/icons";
 import "./VentureDashboard.css";
 
@@ -98,31 +86,6 @@ const StudentWorkspace = () => {
   const [isReviewing, setIsReviewing] = useState(false);
   const [newLogContent, setNewLogContent] = useState("");
 
-  const [showFinanceModal, setShowFinanceModal] = useState(false);
-  const [showPitchModal, setShowPitchModal] = useState(false);
-  const [showReviewSettingsModal, setShowReviewSettingsModal] = useState(false);
-  const [selectedCompetition, setSelectedCompetition] = useState("互联网+");
-  
-  const [activeFileUrl, setActiveFileUrl] = useState(null);
-  
-  const [financeForm, setFinanceForm] = useState({ cac: 50, price: 99, fixed: 10000 });
-  const [pitchTime, setPitchTime] = useState(300);
-  const [isPitching, setIsPitching] = useState(false);
-  
-  useEffect(() => {
-    let timer;
-    if (isPitching && pitchTime > 0) {
-      timer = setInterval(() => setPitchTime(t => t - 1), 1000);
-    } else if (pitchTime === 0) {
-      setIsPitching(false);
-    }
-    return () => clearInterval(timer);
-  }, [isPitching, pitchTime]);
-
-  const currentBEP = financeForm.price > financeForm.cac 
-    ? Math.ceil(financeForm.fixed / (financeForm.price - financeForm.cac)) 
-    : "无法盈利";
-
   const [currentStep, setCurrentStep] = useState(0);
   const [formError, setFormError] = useState("");
   const [projectForm, setProjectForm] = useState({
@@ -146,10 +109,6 @@ const StudentWorkspace = () => {
       if (activeProjectId) {
         const curProj = data.projects.find(p => p.id === activeProjectId);
         if (curProj) setEditorContent(curProj.content || "");
-        
-        const curFiles = data.project_files ? data.project_files.filter(f => f.project_id === activeProjectId) : [];
-        if (curFiles.length > 0) setActiveFileUrl(curFiles[0].file_url);
-        else setActiveFileUrl(null);
       }
     } catch (e) { console.error(e); }
   };
@@ -240,7 +199,6 @@ const StudentWorkspace = () => {
     if (!file) return;
     const formData = new FormData();
     formData.append("file", file);
-    if (activeProjectId) formData.append("project_id", activeProjectId);
     const hide = message.loading('解析中...', 0);
     try {
       const res = await fetch("http://localhost:8000/api/projects/import", { method: "POST", body: formData });
@@ -248,14 +206,10 @@ const StudentWorkspace = () => {
       hide();
       if (data.text) {
         setEditorContent(data.text);
-        setActiveFileUrl(data.file_url);
-        if (activeProjectId) {
-           await saveContent(data.text);
-           await fetchDashboardData();
-        }
+        if (activeProjectId) await saveContent(data.text);
         setActivePage('editor');
         setShowImportModal(false);
-        message.success(`解析原件并保留: ${data.filename}`);
+        message.success(`解析成功: ${data.filename}`);
       } else { message.error(data.error || "解析失败"); }
     } catch (err) { hide(); message.error("文件上传失败"); }
   };
@@ -391,32 +345,6 @@ const StudentWorkspace = () => {
     setProjectForm({ ...projectForm, members: newMembers });
   };
 
-  const handleExportFile = () => {
-    if (!editorContent) {
-      message.warning("当前编辑器没有内容可供导出");
-      return;
-    }
-    Modal.confirm({
-      title: '导出前请确认保存',
-      description: '导出前，请确保您在编辑器内的修改已经手动点击“手动保存”按钮。',
-      okText: '已确认保存，导出预览',
-      cancelText: '取消并去保存',
-      centered: true,
-      okButtonProps: { className: "bg-indigo-600 border-none font-bold" },
-      onOk: () => {
-        const element = document.createElement("a");
-        const file = new Blob([editorContent], { type: 'text/plain;charset=utf-8' });
-        element.href = URL.createObjectURL(file);
-        const activeProject = syncData.projects.find(p => p.id === activeProjectId);
-        element.download = activeProject ? `${activeProject.name}_导出文本.txt` : "未命名项目草稿_导出文本.txt";
-        document.body.appendChild(element);
-        element.click();
-        document.body.removeChild(element);
-        message.success("项目文档导出成功！");
-      }
-    });
-  };
-
   const highlightKeyword = (text) => {
     if (!text) return "";
     return text.toString().split(/(立项|截止)/g).map((part, i) =>
@@ -514,7 +442,7 @@ const StudentWorkspace = () => {
         {/* Main Content Area */}
         <section className="flex-1 flex flex-col bg-white overflow-hidden relative">
           <header className="h-16 border-b border-[#f1f3f5] px-8 flex items-center justify-between bg-white/80 backdrop-blur-md z-10 shrink-0">
-            <div className="flex flex-col"><span className="text-[10px] font-black text-blue-500 tracking-widest uppercase">{activePage === 'chat' ? 'Venture Agent AI' : activePage === 'editor' ? 'Venture Dashboard' : 'Team Hub'}</span><span className="text-xs font-bold text-slate-400">{activePage === 'chat' ? '灵感辅导中' : activePage === 'editor' ? '项目管控中' : '跨界协作中'}</span></div>
+            <div className="flex flex-col"><span className="text-[10px] font-black text-blue-500 tracking-widest uppercase">{activePage === 'chat' ? 'Venture Agent AI' : 'Venture Dashboard'}</span><span className="text-xs font-bold text-slate-400">{activePage === 'chat' ? '灵感辅导中' : '项目管控中'}</span></div>
             <Popover content={notificationContent} title={<span className="font-black text-sm">通知中心</span>} trigger="click" placement="bottomRight">
               <Badge count={2} size="small" offset={[-2, 6]}><Button type="text" icon={<BellOutlined className="text-slate-400 text-lg" />} /></Badge>
             </Popover>
@@ -529,95 +457,48 @@ const StudentWorkspace = () => {
               <header className="h-20 border-b border-gray-100 px-8 flex items-center justify-between bg-white sticky top-0 z-10 shrink-0">
                 <div className="flex flex-col"><h2 className="text-[14px] font-black text-indigo-500 uppercase tracking-[0.2em] m-0">Venture Editor</h2><span className="text-[9px] text-slate-300 font-bold uppercase">{activeProjectId ? 'Project Editing' : 'Draft Preparation'}</span></div>
                 <div className="flex gap-3">
-                  <Button onClick={handleExportFile} type="primary" shape="round" className="h-10 px-10 font-black bg-indigo-600 border-none shadow-lg shadow-indigo-200">导出预览</Button>
+                  <Button type="primary" shape="round" className="h-10 px-10 font-black bg-indigo-600 border-none shadow-lg shadow-indigo-200">导出预览</Button>
                 </div>
               </header>
               <div className="flex-1 p-10">
                 {(activeProjectId || editorContent) ? (
                   <div className="max-w-5xl mx-auto space-y-8 animate-slide-up">
-                    <div className="grid grid-cols-4 gap-4">
-                      <div onClick={() => setShowLogModal(true)} className="group p-6 rounded-[32px] bg-white border-2 border-transparent hover:border-purple-200 shadow-xl shadow-slate-200/30 transition-all cursor-pointer flex flex-col items-center justify-center gap-3 text-center h-36">
-                        <div className="w-12 h-12 rounded-[20px] bg-purple-50 text-purple-500 flex items-center justify-center text-2xl shadow-sm group-hover:scale-110 transition-transform"><CommitIcon /></div>
-                        <div className="flex flex-col gap-0.5"><span className="text-[13px] font-black text-slate-800">项目进度日志</span><span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Commit Logs</span></div>
+                    <div className="grid grid-cols-2 gap-8">
+                      <div onClick={() => setShowLogModal(true)} className="group p-8 rounded-[40px] bg-white border-2 border-transparent hover:border-purple-200 shadow-xl shadow-slate-200/30 transition-all cursor-pointer flex items-center gap-6">
+                        <div className="w-16 h-16 rounded-[24px] bg-purple-50 text-purple-500 flex items-center justify-center text-3xl shadow-sm group-hover:scale-110 transition-transform"><CommitIcon /></div>
+                        <div className="flex flex-col gap-1"><span className="text-[16px] font-black text-slate-800">项目日志/进度</span><span className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">Commit History & Logs</span></div>
                       </div>
-                      <div onClick={() => setShowReviewSettingsModal(true)} className="group p-6 rounded-[32px] bg-white border-2 border-transparent hover:border-amber-200 shadow-xl shadow-slate-200/30 transition-all cursor-pointer flex flex-col items-center justify-center gap-3 text-center h-36">
-                        <div className="w-12 h-12 rounded-[20px] bg-amber-50 text-amber-500 flex items-center justify-center text-2xl shadow-sm group-hover:scale-110 transition-transform"><BulbOutlined /></div>
-                        <div className="flex flex-col gap-0.5"><span className="text-[13px] font-black text-slate-800">深度诊断评估</span><span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">AI Review</span></div>
-                      </div>
-                      <div onClick={() => setShowFinanceModal(true)} className="group p-6 rounded-[32px] bg-white border-2 border-transparent hover:border-emerald-200 shadow-xl shadow-slate-200/30 transition-all cursor-pointer flex flex-col items-center justify-center gap-3 text-center h-36">
-                        <div className="w-12 h-12 rounded-[20px] bg-emerald-50 text-emerald-500 flex items-center justify-center text-2xl shadow-sm group-hover:scale-110 transition-transform"><LineChartOutlined /></div>
-                        <div className="flex flex-col gap-0.5"><span className="text-[13px] font-black text-slate-800">简易财务推演</span><span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Finance Calc</span></div>
-                      </div>
-                      <div onClick={() => { setPitchTime(300); setIsPitching(false); setShowPitchModal(true); }} className="group p-6 rounded-[32px] bg-white border-2 border-transparent hover:border-rose-200 shadow-xl shadow-slate-200/30 transition-all cursor-pointer flex flex-col items-center justify-center gap-3 text-center h-36">
-                        <div className="w-12 h-12 rounded-[20px] bg-rose-50 text-rose-500 flex items-center justify-center text-2xl shadow-sm group-hover:scale-110 transition-transform"><AudioOutlined /></div>
-                        <div className="flex flex-col gap-0.5"><span className="text-[13px] font-black text-slate-800">全真路演模拟</span><span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Pitch Mock</span></div>
+                      <div onClick={handleRequestReview} className="group p-8 rounded-[40px] bg-white border-2 border-transparent hover:border-amber-200 shadow-xl shadow-slate-200/30 transition-all cursor-pointer flex items-center gap-6">
+                        <div className="w-16 h-16 rounded-[24px] bg-amber-50 text-amber-500 flex items-center justify-center text-3xl shadow-sm group-hover:scale-110 transition-transform"><BulbOutlined /></div>
+                        <div className="flex flex-col gap-1"><span className="text-[16px] font-black text-slate-800">灵感深度启发</span><span className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">AI Brainstorming Analysis</span></div>
                       </div>
                     </div>
 
-                    <div className="flex h-full min-h-[700px] gap-6 editor-surface bg-transparent border-none shadow-none">
-                      {/* Left: Editor */}
-                      <div className="flex-1 bg-white border border-slate-100 rounded-[40px] shadow-sm relative overflow-hidden flex flex-col">
-                        <div className="absolute top-0 left-0 w-2 h-full bg-indigo-500/10 z-0"></div>
-                        <div className="flex-1 p-10 z-10 flex flex-col">
-                          {editorContent ? (
-                            <div className="prose prose-slate max-w-none flex-1 flex flex-col h-full">
-                              <div className="flex justify-between items-center mb-6 shrink-0">
-                                <h1 className="text-2xl font-black m-0 text-slate-800 flex items-center gap-3"><FileTextOutlined className="text-indigo-600" /> 项目计划书正文</h1>
-                                <div className="flex items-center gap-2">
-                                  {isSaving && <span className="text-[10px] text-indigo-400 font-black animate-pulse uppercase">Cloud Saving...</span>}
-                                  <Button onClick={() => saveContent(editorContent)} icon={<CloudUploadOutlined />} shape="round" type="text" className="text-[11px] font-black text-slate-400">手动保存</Button>
-                                </div>
+                    <div className="min-h-[700px] editor-surface relative overflow-hidden flex flex-col">
+                      <div className="absolute top-0 left-0 w-2 h-full bg-indigo-500/10 z-0"></div>
+                      <div className="flex-1 p-12 z-10 flex flex-col">
+                        {editorContent ? (
+                          <div className="prose prose-slate max-w-none flex-1 flex flex-col">
+                            <div className="flex justify-between items-center mb-6">
+                              <h1 className="text-2xl font-black m-0 text-slate-800 flex items-center gap-3"><FileTextOutlined className="text-indigo-600" /> 项目计划书正文</h1>
+                              <div className="flex items-center gap-2">
+                                {isSaving && <span className="text-[10px] text-indigo-400 font-black animate-pulse uppercase">Cloud Saving...</span>}
+                                <Button onClick={() => saveContent(editorContent)} icon={<CloudUploadOutlined />} shape="round" type="text" className="text-[11px] font-black text-slate-400">手动保存</Button>
                               </div>
-                              <textarea
-                                className="w-full flex-1 bg-slate-50 p-6 rounded-3xl border border-dashed border-slate-200 text-sm leading-relaxed text-slate-600 font-medium resize-none outline-none focus:border-indigo-300 transition-all custom-scrollbar min-h-[500px]"
-                                value={editorContent} onChange={e => setEditorContent(e.target.value)} placeholder="在此编辑您的项目计划书..."
-                              />
                             </div>
-                          ) : (
-                            <div className="h-full flex flex-col items-center justify-center py-24 text-center space-y-8">
-                              <div className="w-24 h-24 bg-slate-50 rounded-[35%] flex items-center justify-center text-slate-200 text-5xl animate-pulse shadow-inner"><FileTextOutlined /></div>
-                              <div className="space-y-3"><h3 className="text-2xl font-black text-slate-800 tracking-tight">Venture Editor - 创作空间</h3><p className="max-w-md text-sm font-bold text-slate-400 leading-relaxed mx-auto">请在左侧选择对应项目，或直接导入 PDF/DOCX 文件。我们将为您保留每个项目的专属创作状态。</p></div>
-                              <Button onClick={() => fileInputRef.current?.click()} size="large" shape="round" className="h-14 px-10 font-black border-2 border-indigo-100 text-indigo-600 bg-white hover:shadow-xl transition-all">快速导入解析</Button>
-                            </div>
-                          )}
-                        </div>
+                            <textarea
+                              className="w-full flex-1 bg-slate-50 p-8 rounded-3xl border border-dashed border-slate-200 text-sm leading-relaxed text-slate-600 font-medium resize-none outline-none focus:border-indigo-300 transition-all custom-scrollbar min-h-[500px]"
+                              value={editorContent} onChange={e => setEditorContent(e.target.value)} placeholder="在此编辑您的项目计划书..."
+                            />
+                          </div>
+                        ) : (
+                          <div className="h-full flex flex-col items-center justify-center py-24 text-center space-y-8">
+                            <div className="w-24 h-24 bg-slate-50 rounded-[35%] flex items-center justify-center text-slate-200 text-5xl animate-pulse shadow-inner"><FileTextOutlined /></div>
+                            <div className="space-y-3"><h3 className="text-2xl font-black text-slate-800 tracking-tight">Venture Editor - 创作空间</h3><p className="max-w-md text-sm font-bold text-slate-400 leading-relaxed mx-auto">请在左侧选择对应项目，或直接导入 PDF/DOCX 文件。我们将为您保留每个项目的专属创作状态。</p></div>
+                            <Button onClick={() => fileInputRef.current?.click()} size="large" shape="round" className="h-14 px-10 font-black border-2 border-indigo-100 text-indigo-600 bg-white hover:shadow-xl transition-all">快速导入解析</Button>
+                          </div>
+                        )}
                       </div>
-
-                      {/* Right: File Viewer */}
-                      {(activeProjectId || editorContent) && (
-                        <div className="w-[450px] bg-slate-50 border border-slate-200 rounded-[40px] shadow-inner flex flex-col overflow-hidden shrink-0">
-                          <div className="h-16 bg-white border-b border-slate-100 px-6 flex items-center justify-between shrink-0">
-                            <span className="text-xs font-black text-slate-700 flex items-center gap-2"><FolderOpenOutlined className="text-indigo-500 text-lg" /> 远端归档附录</span>
-                            <Button onClick={() => fileInputRef.current?.click()} size="small" type="dashed" shape="round" icon={<CloudUploadOutlined className="text-indigo-500" />} className="text-[10px] font-bold text-slate-500 border-indigo-200 hover:border-indigo-400 bg-slate-50">新增附件</Button>
-                          </div>
-                          <div className="bg-white p-3 border-b border-slate-100 flex gap-3 overflow-x-auto custom-scrollbar shrink-0 h-[60px] items-center">
-                            {(!activeProjectId && activeFileUrl) && (
-                              <div className="shrink-0 max-w-[120px] px-4 py-1.5 bg-indigo-50 border border-indigo-200 rounded-2xl cursor-pointer flex items-center gap-2 shadow-sm">
-                                <FilePdfOutlined className="text-indigo-600 text-[12px]" />
-                                <span className="text-[10px] font-bold text-indigo-700 truncate">当前草稿附件</span>
-                              </div>
-                            )}
-                            {activeProjectId && (syncData.project_files || []).filter(f => f.project_id === activeProjectId).map((f, i) => (
-                              <div key={i} onClick={() => setActiveFileUrl(f.file_url)} className={`shrink-0 max-w-[150px] px-3 py-1.5 border rounded-2xl cursor-pointer flex flex-col gap-0.5 transition-all ${activeFileUrl === f.file_url ? 'bg-indigo-50 border-indigo-200 shadow-sm' : 'bg-white border-slate-100 hover:border-slate-300'}`}>
-                                <div className="flex items-center gap-1.5 overflow-hidden">
-                                  {f.filename.endsWith('.pdf') ? <FilePdfOutlined className={activeFileUrl === f.file_url ? 'text-indigo-600 text-[12px]' : 'text-slate-400 text-[12px]'} /> : <FileWordOutlined className={activeFileUrl === f.file_url ? 'text-blue-500 text-[12px]' : 'text-slate-400 text-[12px]'} />}
-                                  <span className={`text-[10px] font-bold truncate flex-1 ${activeFileUrl === f.file_url ? 'text-indigo-700' : 'text-slate-500'}`} title={f.filename}>{f.filename}</span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                          <div className="flex-1 bg-slate-100 relative">
-                            {activeFileUrl ? (
-                              <iframe src={activeFileUrl} className="w-full h-full border-none" title="Document Preview" />
-                            ) : (
-                              <div className="h-full flex flex-col items-center justify-center text-slate-300 gap-4 opacity-50">
-                                <FileSearchOutlined className="text-5xl" />
-                                <span className="text-[11px] font-black uppercase tracking-widest text-center px-8">选择上方附件原档以开启高保真预览</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
                     </div>
                   </div>
                 ) : <div className="h-full flex flex-col items-center justify-center opacity-30 gap-6 py-20 px-20">
@@ -626,78 +507,7 @@ const StudentWorkspace = () => {
                 </div>}
               </div>
             </div>
-          ) : (
-            <div className="flex-1 flex flex-col bg-[#fcfcfd] overflow-y-auto custom-scrollbar p-10 gap-8">
-              {/* Top Metrics Area */}
-              <div className="grid grid-cols-3 gap-6 animate-slide-up">
-                <div className="bg-gradient-to-br from-indigo-500 justify-between to-blue-600 p-6 rounded-[32px] text-white flex flex-col gap-4 shadow-xl shadow-indigo-200">
-                  <div className="flex justify-between items-center">
-                    <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center text-2xl"><TeamOutlined /></div>
-                    <span className="bg-white/20 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">Active</span>
-                  </div>
-                  <div><h3 className="text-3xl font-black m-0">{(syncData.members || []).filter(m => !activeProjectId || m.project_id === activeProjectId).length || 3}</h3><p className="text-blue-100 text-xs font-bold uppercase tracking-widest m-0">Team Members</p></div>
-                </div>
-                <div className="bg-white p-6 rounded-[32px] border border-slate-100 flex flex-col gap-4 shadow-sm group hover:shadow-xl hover:shadow-emerald-100 transition-all">
-                  <div className="flex justify-between items-center">
-                    <div className="w-12 h-12 bg-emerald-50 text-emerald-500 rounded-2xl flex items-center justify-center text-2xl group-hover:scale-110 transition-transform"><CheckCircleOutlined /></div>
-                    <span className="bg-emerald-50 text-emerald-600 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">Done</span>
-                  </div>
-                  <div><h3 className="text-3xl font-black text-slate-800 m-0">12</h3><p className="text-slate-400 text-xs font-bold uppercase tracking-widest m-0">Completed Tasks</p></div>
-                </div>
-                <div className="bg-white p-6 rounded-[32px] border border-slate-100 flex flex-col gap-4 shadow-sm group hover:shadow-xl hover:shadow-rose-100 transition-all">
-                  <div className="flex justify-between items-center">
-                    <div className="w-12 h-12 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center text-2xl group-hover:scale-110 transition-transform"><ClockCircleOutlined /></div>
-                    <span className="bg-rose-50 text-rose-600 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">Impending</span>
-                  </div>
-                  <div><h3 className="text-3xl font-black text-slate-800 m-0">3</h3><p className="text-slate-400 text-xs font-bold uppercase tracking-widest m-0">Upcoming DDLs</p></div>
-                </div>
-              </div>
-
-              {/* Kanban Board Area */}
-              <div className="flex-1 min-h-[500px] flex gap-6 animate-slide-up" style={{ animationDelay: '0.1s' }}>
-                {/* To-Do */}
-                <div className="flex-1 bg-slate-50/50 rounded-[32px] p-6 border border-slate-100 flex flex-col gap-4">
-                  <div className="flex justify-between items-center"><h4 className="text-[13px] font-black text-slate-700 uppercase tracking-widest flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-slate-400"></div>待办计划</h4><span className="w-6 h-6 flex items-center justify-center rounded-full bg-white text-xs font-black shadow-sm text-slate-500">2</span></div>
-                  <div className="space-y-3">
-                    <div className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow cursor-grab">
-                      <p className="font-bold text-slate-800 text-sm mb-3">完善商业模式画布 (BMC)</p>
-                      <div className="flex justify-between items-center"><Avatar.Group size="small"><Avatar src="https://api.dicebear.com/7.x/avataaars/svg?seed=Alice" /><Avatar src="https://api.dicebear.com/7.x/avataaars/svg?seed=Bob" /></Avatar.Group><span className="text-[10px] font-black text-amber-500 bg-amber-50 px-2 py-1 rounded-lg">High</span></div>
-                    </div>
-                    <div className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow cursor-grab">
-                      <p className="font-bold text-slate-800 text-sm mb-3">调研竞品分析数据</p>
-                      <div className="flex justify-between items-center"><Avatar src="https://api.dicebear.com/7.x/avataaars/svg?seed=Charlie" size="small" /><span className="text-[10px] font-black text-blue-500 bg-blue-50 px-2 py-1 rounded-lg">Medium</span></div>
-                    </div>
-                  </div>
-                  <Button type="dashed" className="w-full h-12 rounded-2xl text-slate-400 font-bold border-slate-200 mt-2 bg-transparent hover:bg-slate-50">添加新任务</Button>
-                </div>
-                {/* In Progress */}
-                <div className="flex-1 bg-indigo-50/30 rounded-[32px] p-6 border border-indigo-100/50 flex flex-col gap-4">
-                  <div className="flex justify-between items-center"><h4 className="text-[13px] font-black text-indigo-700 uppercase tracking-widest flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></div>研发推进中</h4><span className="w-6 h-6 flex items-center justify-center rounded-full bg-indigo-100 text-xs font-black text-indigo-600">1</span></div>
-                  <div className="space-y-3">
-                    <div className="bg-white p-5 rounded-3xl shadow-sm border border-indigo-100 hover:shadow-md hover:border-indigo-300 transition-shadow cursor-grab relative overflow-hidden">
-                      <div className="absolute top-0 left-0 h-1 w-full bg-gradient-to-r from-blue-400 to-indigo-500"></div>
-                      <p className="font-bold text-slate-800 text-sm mb-3 mt-1">结合 AI 诊断修改计划书中“市场痛点”章节</p>
-                      <div className="flex justify-between items-center"><Avatar src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" size="small" /><span className="text-[10px] font-black text-rose-500 bg-rose-50 px-2 py-1 rounded-lg flex items-center gap-1"><ClockCircleOutlined /> 今天截止</span></div>
-                    </div>
-                  </div>
-                </div>
-                {/* Done */}
-                <div className="flex-1 bg-emerald-50/30 rounded-[32px] p-6 border border-emerald-100/50 flex flex-col gap-4">
-                  <div className="flex justify-between items-center"><h4 className="text-[13px] font-black text-emerald-700 uppercase tracking-widest flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-emerald-500"></div>已归档节点</h4><span className="w-6 h-6 flex items-center justify-center rounded-full bg-emerald-100 text-xs font-black text-emerald-600">3</span></div>
-                  <div className="space-y-3 opacity-60 hover:opacity-100 transition-opacity">
-                    <div className="bg-white p-5 rounded-3xl border border-emerald-100 cursor-default">
-                      <p className="font-bold text-slate-500 text-sm mb-3 line-through decoration-slate-300">完成第一版初稿导入解析</p>
-                      <div className="flex justify-between items-center text-emerald-500 text-sm"><CheckCircleOutlined /> <span className="text-[10px] font-black text-slate-400">昨天完成</span></div>
-                    </div>
-                    <div className="bg-white p-5 rounded-3xl border border-emerald-100 cursor-default">
-                      <p className="font-bold text-slate-500 text-sm mb-3 line-through decoration-slate-300">确立项目指导导师信息</p>
-                      <div className="flex justify-between items-center text-emerald-500 text-sm"><CheckCircleOutlined /> <span className="text-[10px] font-black text-slate-400">2天前</span></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
+          ) : <div className="flex-1 flex items-center justify-center font-black text-slate-300 text-2xl animate-pulse">协作功能模块正在拼命开发中...</div>}
         </section>
 
         {/* Console Column - Context Aware */}
@@ -797,7 +607,7 @@ const StudentWorkspace = () => {
         {/* --- 大气版质量评审 Modal --- */}
         <Modal title={null} open={showReviewModal} onCancel={() => setShowReviewModal(false)} footer={null} centered width={800} className="lofty-modal no-border-modal">
           <div className="p-10 space-y-8">
-            <div className="flex items-center gap-4"><div className="w-14 h-14 rounded-3xl bg-amber-500 flex items-center justify-center text-white text-3xl shadow-xl shadow-amber-200"><BulbOutlined /></div><div><h2 className="text-2xl font-black text-slate-800 m-0">Venture AI 项目深度诊断与改写建议</h2><p className="text-slate-400 font-bold text-xs uppercase tracking-widest">AI Diagnosis & Suggestions Report</p></div></div>
+            <div className="flex items-center gap-4"><div className="w-14 h-14 rounded-3xl bg-amber-500 flex items-center justify-center text-white text-3xl shadow-xl shadow-amber-200"><BulbOutlined /></div><div><h2 className="text-2xl font-black text-slate-800 m-0">Venture AI 灵感深度启发</h2><p className="text-slate-400 font-bold text-xs uppercase tracking-widest">Deep Brainstorming Analysis Report</p></div></div>
             <div className="bg-slate-900 rounded-[40px] p-10 relative overflow-hidden min-h-[500px]">
               <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/10 rounded-full blur-[80px]"></div>
               {isReviewing ? (
@@ -809,86 +619,13 @@ const StudentWorkspace = () => {
                 <div className="review-content text-amber-50/90 leading-relaxed font-medium">
                   <ReactMarkdown>{activeReview}</ReactMarkdown>
                   <Divider className="border-white/10 my-8" />
-                  <div className="p-4 bg-amber-950/30 rounded-2xl border border-amber-900/50 mb-6 flex items-start gap-3">
-                    <span className="text-amber-500 mt-0.5">⚠️</span>
-                    <span className="text-[11px] text-amber-200/70 font-medium leading-relaxed">以上评估大票由 Venture Agent AI 采用所选赛道（{selectedCompetition}）的底层逻辑模型自动推演生成。内容仅作为实战演练与逻辑排缺启发参考，不代表真实的官方赛事成绩承诺与最终裁判标准。</span>
-                  </div>
                   <div className="flex justify-between items-end">
                     <span className="text-[10px] text-slate-500 font-black uppercase">Insights powered by VentureAgent AI</span>
-                    <Button onClick={() => { setShowReviewModal(false); setShowReviewSettingsModal(true); }} ghost shape="round" className="border-amber-500/50 text-amber-500 hover:bg-amber-500/10">切换赛道重新诊断</Button>
+                    <Button onClick={handleRequestReview} ghost shape="round" className="border-amber-500/50 text-amber-500 hover:bg-amber-500/10">重新发起深度启发</Button>
                   </div>
                 </div>
               )}
             </div>
-          </div>
-        </Modal>
-
-        {/* --- 诊断赛道设置 Modal --- */}
-        <Modal title={null} open={showReviewSettingsModal} onCancel={() => setShowReviewSettingsModal(false)} footer={null} centered width={500} className="premium-modal no-border-modal">
-          <div className="p-8 space-y-6">
-            <div className="flex items-center gap-4 mb-4"><div className="w-12 h-12 rounded-[20px] bg-amber-50 flex items-center justify-center text-amber-500 text-2xl shadow-sm"><RobotOutlined /></div><div><h3 className="text-xl font-black text-slate-800 m-0">选择 AI 评估标准</h3><p className="text-slate-400 text-xs font-bold uppercase tracking-widest m-0">Select Rubric Standard</p></div></div>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">评级标准 (Competition Track)</label>
-                <div className="flex flex-col gap-3 mt-2">
-                  <div onClick={() => setSelectedCompetition("互联网+")} className={`p-4 rounded-2xl border-2 cursor-pointer transition-all ${selectedCompetition === "互联网+" ? "border-amber-400 bg-amber-50" : "border-slate-100 bg-white hover:border-slate-300"}`}>
-                    <div className="flex justify-between items-center"><span className="text-sm font-black text-slate-800">🎖️ 中国国际大学生创新大赛 (原互联网+)</span>{selectedCompetition === "互联网+" && <CheckCircleOutlined className="text-amber-500" />}</div>
-                    <p className="text-[10px] text-slate-400 font-bold mt-1 mb-0">侧重：商业模式闭环、带动就业、财务营收真实性</p>
-                  </div>
-                  <div onClick={() => setSelectedCompetition("挑战杯")} className={`p-4 rounded-2xl border-2 cursor-pointer transition-all ${selectedCompetition === "挑战杯" ? "border-amber-400 bg-amber-50" : "border-slate-100 bg-white hover:border-slate-300"}`}>
-                    <div className="flex justify-between items-center"><span className="text-sm font-black text-slate-800">🏆 挑战杯 全国大学生课外学术科技比赛</span>{selectedCompetition === "挑战杯" && <CheckCircleOutlined className="text-amber-500" />}</div>
-                    <p className="text-[10px] text-slate-400 font-bold mt-1 mb-0">侧重：学术深度、技术创新壁垒、社会调查严谨性</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <Button onClick={() => { setShowReviewSettingsModal(false); handleRequestReview(); }} type="primary" block shape="round" className="h-12 text-sm font-black bg-amber-500 text-white border-none shadow-lg shadow-amber-200 mt-4">注入所选规则并开始全面诊断</Button>
-          </div>
-        </Modal>
-
-        {/* --- 简易财务推演 Modal --- */}
-        <Modal title={null} open={showFinanceModal} onCancel={() => setShowFinanceModal(false)} footer={null} centered width={600} className="premium-modal no-border-modal">
-          <div className="p-8 space-y-6">
-            <div className="flex items-center gap-4 mb-4"><div className="w-12 h-12 rounded-[20px] bg-emerald-50 flex items-center justify-center text-emerald-500 text-2xl shadow-sm"><LineChartOutlined /></div><div><h3 className="text-xl font-black text-slate-800 m-0">简易财务生存推演</h3><p className="text-slate-400 text-xs font-bold uppercase tracking-widest m-0">Breakeven Point Calculator</p></div></div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1 bg-slate-50 p-4 rounded-2xl border border-slate-100"><label className="text-[10px] font-black text-slate-400 uppercase">月度固定成本 (Fixed Cost)</label><Input type="number" prefix="¥" value={financeForm.fixed} onChange={e => setFinanceForm({ ...financeForm, fixed: Number(e.target.value) })} className="border-none bg-white shadow-sm font-black" /></div>
-              <div className="space-y-1 bg-slate-50 p-4 rounded-2xl border border-slate-100"><label className="text-[10px] font-black text-slate-400 uppercase">单用户获客成本 (CAC)</label><Input type="number" prefix="¥" value={financeForm.cac} onChange={e => setFinanceForm({ ...financeForm, cac: Number(e.target.value) })} className="border-none bg-white shadow-sm font-black text-rose-500" /></div>
-              <div className="space-y-1 bg-slate-50 p-4 rounded-2xl border border-slate-100"><label className="text-[10px] font-black text-slate-400 uppercase">预期单用户客单价 (Price)</label><Input type="number" prefix="¥" value={financeForm.price} onChange={e => setFinanceForm({ ...financeForm, price: Number(e.target.value) })} className="border-none bg-white shadow-sm font-black text-blue-500" /></div>
-            </div>
-            <div className={`p-6 rounded-[32px] flex items-center justify-between text-white shadow-xl ${currentBEP === '无法盈利' ? 'bg-gradient-to-tr from-rose-500 to-red-400 shadow-rose-200' : 'bg-gradient-to-tr from-emerald-500 to-green-400 shadow-emerald-200'}`}>
-              <div className="flex flex-col gap-1">
-                <span className="text-[11px] font-black uppercase tracking-widest bg-white/20 w-fit px-2 rounded-lg">推演结果：盈亏平衡点 (BEP)</span>
-                <span className="text-3xl font-black mt-2">{currentBEP} <span className="text-sm font-bold opacity-80">{currentBEP === '无法盈利' ? '请调整结构' : '用户 / 月'}</span></span>
-              </div>
-              <RadarChartOutlined className="text-6xl opacity-20" />
-            </div>
-            <p className="text-[10px] font-bold text-slate-400 text-center uppercase tracking-widest">⚠️ AI 简易推演引擎，仅用于快速检验团队单位经济 (Unit Economics) 合理性</p>
-          </div>
-        </Modal>
-
-        {/* --- 全真路演模拟 Modal --- */}
-        <Modal title={null} open={showPitchModal} onCancel={() => { setShowPitchModal(false); setIsPitching(false); }} footer={null} centered width={800} className="lofty-modal no-border-modal overflow-hidden">
-          <div className="absolute top-0 w-full h-1 bg-slate-100"><div className="h-full bg-rose-500 transition-all duration-1000" style={{ width: `${((300 - pitchTime) / 300) * 100}%` }}></div></div>
-          <div className="p-12 flex flex-col items-center justify-center text-center space-y-8 min-h-[500px]">
-            <div className="w-24 h-24 rounded-full bg-rose-50 flex items-center justify-center text-rose-500 text-5xl shadow-inner"><HourglassOutlined className={isPitching ? "animate-spin" : ""} /></div>
-            <div className="space-y-2">
-              <h2 className="text-6xl font-black text-slate-800 m-0 tracking-tighter" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                {Math.floor(pitchTime / 60).toString().padStart(2, '0')}:{(pitchTime % 60).toString().padStart(2, '0')}
-              </h2>
-              <p className="text-[11px] font-black text-slate-400 uppercase tracking-[0.3em]">Pitch Deck Roadshow Countdown</p>
-            </div>
-            <div className="flex gap-4">
-              <Button onClick={() => setIsPitching(!isPitching)} size="large" shape="round" className={`h-14 px-10 font-black border-none text-white shadow-lg ${isPitching ? 'bg-amber-500 hover:bg-amber-400 shadow-amber-200' : 'bg-rose-500 hover:bg-rose-400 shadow-rose-200'}`} icon={isPitching ? <PauseCircleOutlined /> : <PlayCircleOutlined />}>
-                {isPitching ? '暂停路演' : '开始路演'}
-              </Button>
-              <Button onClick={() => setPitchTime(300)} size="large" shape="round" className="h-14 px-8 font-black border-2 border-slate-100 text-slate-500 hover:bg-slate-50">重置时间</Button>
-            </div>
-            {isPitching && pitchTime < 280 && (
-              <div className="mt-8 p-6 bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg animate-slide-up text-left relative">
-                <span className="absolute -top-3 left-6 bg-rose-500 text-white text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-widest shadow-lg">评委 AI 随机打断追问机制</span>
-                <p className="text-slate-200 font-medium text-sm leading-relaxed mb-0 mt-2">“同学请暂停一下我想问个问题... 你这里提到的获客成本是 0，这个数据有经过市场实际验证吗？据我所知同类产品的获客成本都在几十元以上。”</p>
-              </div>
-            )}
           </div>
         </Modal>
 
