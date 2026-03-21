@@ -52,12 +52,31 @@ export default function TeacherDashboard() {
   const navigate = useNavigate();
   const [activeMenu, setActiveMenu] = useState('2');
   const [currentUser, setCurrentUser] = useState('老师');
+  const [projectsData, setProjectsData] = useState([]);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     const user = localStorage.getItem('va_username');
-    if (!user) navigate('/');
-    else setCurrentUser(user);
+    if (!user) {
+      navigate('/');
+      return;
+    }
+    setCurrentUser(user);
+    fetchDashboardData();
   }, [navigate]);
+
+  const fetchDashboardData = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('http://localhost:8000/api/teacher/dashboard');
+      const data = await res.json();
+      setProjectsData(data);
+    } catch (e) {
+      console.error("Failed to fetch teacher dashboard data:", e);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('va_token');
@@ -70,16 +89,20 @@ export default function TeacherDashboard() {
     { title: '负责人', dataIndex: 'leader', key: 'leader' },
     { title: '当前阶段', dataIndex: 'stage', key: 'stage' },
     { 
-      title: '触发的致命规则', 
-      dataIndex: 'fatalRule', 
-      key: 'fatalRule',
-      render: (text) => <span className="bg-red-50 text-red-600 border border-red-200 px-2 py-0.5 rounded text-xs font-semibold">{text}</span>
+      title: 'AI 风险等级', 
+      dataIndex: 'risk_level', 
+      key: 'risk_level',
+      render: (level) => (
+        <Tag color={level==='High'?'red':level==='Medium'?'orange':'green'}>
+          {level === 'High' ? '高危预警' : level === 'Medium' ? '中度风险' : '运行良好'}
+        </Tag>
+      )
     },
-    { title: 'AI 自动诊断结论', dataIndex: 'aiConclusion', key: 'aiConclusion', className: 'text-slate-500 text-sm' },
+    { title: 'AI 自动诊断结论', dataIndex: 'audit_summary', key: 'audit_summary', className: 'text-slate-500 text-sm' },
     { 
       title: '操作', 
       key: 'action',
-      render: () => <button className="bg-white border border-red-200 text-red-600 hover:bg-red-50 px-3 py-1 rounded shadow-sm text-xs font-medium transition">人工干预介入</button>
+      render: () => <button className="bg-white border border-indigo-200 text-indigo-600 hover:bg-indigo-50 px-3 py-1 rounded shadow-sm text-xs font-medium transition">调阅详情</button>
     },
   ];
 
@@ -210,28 +233,28 @@ export default function TeacherDashboard() {
               <div className="grid grid-cols-4 gap-6">
                 <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col">
                   <span className="text-sm text-slate-500 mb-2">当前辅导项目总数</span>
-                  <span className="text-3xl font-bold text-slate-800">142<span className="text-sm text-slate-400 font-normal ml-2">个</span></span>
+                  <span className="text-3xl font-bold text-slate-800">{projectsData.length}<span className="text-sm text-slate-400 font-normal ml-2">个</span></span>
                 </div>
                 <div className="bg-white p-6 rounded-2xl border-b-4 border-b-red-500 shadow-sm flex flex-col relative overflow-hidden">
                   <div className="absolute -right-4 -top-4 text-red-100 text-6xl opacity-30"><WarningOutlined /></div>
                   <span className="text-sm text-slate-500 mb-2 flex items-center gap-1.5">
-                    <WarningOutlined className="text-red-500" /> 红色高危预警
+                    <WarningOutlined className="text-red-500" /> 高危预警项目
                   </span>
-                  <span className="text-3xl font-bold text-red-600">12<span className="text-sm text-red-400 font-normal ml-2">项待处理</span></span>
+                  <span className="text-3xl font-bold text-red-600">{projectsData.filter(p=>p.risk_level==='High').length}<span className="text-sm text-red-400 font-normal ml-2">项待处理</span></span>
                 </div>
                 <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col">
-                  <span className="text-sm text-slate-500 mb-2">班级平均进度</span>
+                  <span className="text-sm text-slate-500 mb-2">平均自动诊断深度</span>
                   <div className="flex items-end gap-3 mt-1">
-                    <span className="text-3xl font-bold text-slate-800">45%</span>
+                    <span className="text-3xl font-bold text-slate-800">100%</span>
                     <div className="w-full h-1.5 bg-slate-100 rounded-full mb-2 overflow-hidden">
-                      <div className="h-full bg-emerald-500 w-[45%] rounded-full"></div>
+                      <div className="h-full bg-emerald-500 w-[100%] rounded-full"></div>
                     </div>
                   </div>
                 </div>
                 <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col">
-                  <span className="text-sm text-slate-500 mb-2">最高频触发致命错误</span>
-                  <span className="text-lg font-bold text-slate-800 truncate">H1 价值主张错位</span>
-                  <span className="text-xs text-orange-500 mt-1 bg-orange-50 w-fit px-2 py-0.5 rounded">涉及 28 个项目</span>
+                  <span className="text-sm text-slate-500 mb-2">AI 生成建议覆盖率</span>
+                  <span className="text-lg font-bold text-slate-800 truncate">全量覆盖</span>
+                  <span className="text-xs text-orange-500 mt-1 bg-orange-50 w-fit px-2 py-0.5 rounded">Real-time Auditing</span>
                 </div>
               </div>
 
@@ -244,10 +267,12 @@ export default function TeacherDashboard() {
                 <div className="p-0">
                   <Table 
                     columns={tableColumns} 
-                    dataSource={warningProjectsData} 
+                    dataSource={projectsData} 
                     pagination={false}
                     size="middle"
+                    loading={loading}
                     className="border-none"
+                    rowKey="id"
                   />
                 </div>
               </div>
