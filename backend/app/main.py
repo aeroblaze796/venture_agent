@@ -251,7 +251,7 @@ async def import_project_file(file: UploadFile = File(...), project_id: Optional
         
     file.file.seek(0)
     
-    file_url = f"http://localhost:8000/api/uploads/{unique_filename}"
+    file_url = f"/api/uploads/{unique_filename}"
     try:
         if filename.endswith(".pdf"):
             pdf_reader = pypdf.PdfReader(file.file)

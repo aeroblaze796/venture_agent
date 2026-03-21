@@ -465,7 +465,12 @@ const StudentWorkspace = () => {
     setReviewResult("");
     setShowReviewModal(true);
     try {
-      const res = await fetch(`http://localhost:8001/api/projects/${activeProjectId}/review`, { method: 'POST' });
+      const rubricValue = selectedRubric === "互联网+" ? "internet_plus" : "challenge_cup";
+      const res = await fetch(`http://localhost:8001/api/projects/${activeProjectId}/review`, { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rubric: rubricValue })
+      });
       const data = await res.json();
       setReviewResult(data.review || data.message || "AI 分析完成。");
     } catch (e) {
@@ -690,7 +695,7 @@ const StudentWorkspace = () => {
                               {/* 内容预览或编辑区 */}
                               <div className="flex-1 mt-6 relative rounded-3xl overflow-hidden border border-slate-200 shadow-inner group">
                                 {activeFileId && activeFileUrl && activeFileUrl.endsWith('.pdf') ? (
-                                  <iframe src={`http://localhost:8001${activeFileUrl}`} className="w-full h-[600px] border-none bg-slate-100" title="PDF Preview" />
+                                  <iframe src={activeFileUrl.startsWith('http') ? activeFileUrl.replace('8000', '8001') : `http://localhost:8001${activeFileUrl}`} className="w-full h-[600px] border-none bg-slate-100" title="PDF Preview" />
                                 ) : (
                                   <textarea className="w-full h-full bg-slate-50/50 p-8 text-sm leading-relaxed text-slate-600 font-medium resize-none outline-none focus:bg-white focus:border-indigo-300 transition-all min-h-[500px]" value={editorContent} onChange={e => setEditorContent(e.target.value)} placeholder="所选文档的内容草稿将在此显示，您可以手动合并或润色..." />
                                 )}
