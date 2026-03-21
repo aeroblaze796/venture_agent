@@ -106,6 +106,10 @@ const StudentWorkspace = () => {
   const isReviewing = reviewLoading;
   const activeReview = reviewResult;
   const [newLogContent, setNewLogContent] = useState("");
+  
+  const [financeData, setFinanceData] = useState({ users: 1000, cac: 50, arpu: 200, fixedCost: 50000 });
+  const [pitchTime, setPitchTime] = useState(300);
+  const [isPitching, setIsPitching] = useState(false);
 
   const [currentStep, setCurrentStep] = useState(0);
   const [formError, setFormError] = useState("");
@@ -639,7 +643,7 @@ const StudentWorkspace = () => {
               </header>
               <div className="flex-1 p-10">
                 {(activeProjectId || editorContent) ? (
-                  <div className="max-w-5xl mx-auto space-y-8 animate-slide-up">
+                  <div className={`mx-auto space-y-8 animate-slide-up transition-all ${activeFileUrl ? 'max-w-[1600px] w-full px-2' : 'max-w-5xl'}`}>
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
                       <div onClick={() => setShowLogModal(true)} className="group p-6 rounded-3xl bg-white border border-slate-100 hover:border-purple-200 hover:bg-purple-50/30 shadow-sm hover:shadow-xl hover:shadow-purple-100 transition-all cursor-pointer flex flex-col gap-4">
                         <div className="w-12 h-12 rounded-2xl bg-purple-100 text-purple-600 flex items-center justify-center text-xl shadow-inner group-hover:scale-110 transition-transform"><CommitIcon /></div>
@@ -649,13 +653,13 @@ const StudentWorkspace = () => {
                         <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center text-xl shadow-inner group-hover:scale-110 transition-transform"><BulbOutlined /></div>
                         <div><span className="block text-sm font-black text-slate-800">深度诊断评估</span><span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">AI Assessment</span></div>
                       </div>
-                      <div onClick={() => setShowFinanceModal(true)} className="group p-6 rounded-3xl bg-white border border-slate-100 hover:border-emerald-200 hover:bg-emerald-50/30 shadow-sm hover:shadow-xl hover:shadow-emerald-100 transition-all cursor-pointer flex flex-col gap-4 opacity-70">
+                      <div onClick={() => setShowFinanceModal(true)} className="group p-6 rounded-3xl bg-white border border-slate-100 hover:border-emerald-200 hover:bg-emerald-50/30 shadow-sm hover:shadow-xl hover:shadow-emerald-100 transition-all cursor-pointer flex flex-col gap-4">
                         <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-xl shadow-inner group-hover:scale-110 transition-transform"><RadarChartOutlined /></div>
-                        <div><span className="block text-sm font-black text-slate-800">简易财务推演</span><span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest text-[#10b981]">Coming Soon</span></div>
+                        <div><span className="block text-sm font-black text-slate-800">简易财务推演</span><span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Financial Model</span></div>
                       </div>
-                      <div onClick={() => setShowPitchModal(true)} className="group p-6 rounded-3xl bg-gradient-to-br from-indigo-600 to-blue-700 border border-transparent shadow-md hover:shadow-xl hover:shadow-blue-200 transition-all cursor-pointer flex flex-col gap-4 opacity-70">
+                      <div onClick={() => setShowPitchModal(true)} className="group p-6 rounded-3xl bg-gradient-to-br from-indigo-600 to-blue-700 border border-transparent shadow-md hover:shadow-xl hover:shadow-blue-200 transition-all cursor-pointer flex flex-col gap-4">
                         <div className="w-12 h-12 rounded-2xl bg-white/20 text-white flex items-center justify-center text-xl shadow-inner group-hover:scale-110 transition-transform"><TeamOutlined /></div>
-                        <div><span className="block text-sm font-black text-white">全真路演模拟</span><span className="text-[10px] text-white/60 font-bold uppercase tracking-widest text-amber-300">Coming Soon</span></div>
+                        <div><span className="block text-sm font-black text-white">全真路演模拟</span><span className="text-[10px] text-white/60 font-bold uppercase tracking-widest text-amber-300">Live Pitch Mode</span></div>
                       </div>
                     </div>
                     <div className="min-h-[700px] editor-surface relative overflow-hidden flex flex-col">
@@ -692,12 +696,21 @@ const StudentWorkspace = () => {
                                 )) : <span className="text-[11px] text-slate-400 font-bold italic w-full text-center">系统检测到暂无关联原始附件</span>}
                               </div>
 
-                              {/* 内容预览或编辑区 */}
-                              <div className="flex-1 mt-6 relative rounded-3xl overflow-hidden border border-slate-200 shadow-inner group">
-                                {activeFileId && activeFileUrl && activeFileUrl.endsWith('.pdf') ? (
-                                  <iframe src={activeFileUrl.startsWith('http') ? activeFileUrl.replace('8000', '8001') : `http://localhost:8001${activeFileUrl}`} className="w-full h-[600px] border-none bg-slate-100" title="PDF Preview" />
-                                ) : (
-                                  <textarea className="w-full h-full bg-slate-50/50 p-8 text-sm leading-relaxed text-slate-600 font-medium resize-none outline-none focus:bg-white focus:border-indigo-300 transition-all min-h-[500px]" value={editorContent} onChange={e => setEditorContent(e.target.value)} placeholder="所选文档的内容草稿将在此显示，您可以手动合并或润色..." />
+                              {/* 内容预览或编辑区 - 响应式分栏布局 */}
+                              <div className="flex-1 mt-6 relative flex gap-6 min-h-[600px]">
+                                {/* 左栏：项目正文编辑区 */}
+                                <div className="flex-1 rounded-3xl overflow-hidden border border-slate-200 shadow-inner group">
+                                  <textarea className="w-full h-full bg-slate-50/50 p-8 text-sm leading-relaxed text-slate-600 font-medium resize-none outline-none focus:bg-white focus:border-indigo-300 transition-all min-h-[600px] custom-scrollbar" value={editorContent} onChange={e => setEditorContent(e.target.value)} placeholder="所选文档的内容草稿将在此显示，您可以手动合并或润色..." />
+                                </div>
+                                
+                                {/* 右栏：原文件参照预览 (当有选中且为 PDF 时) */}
+                                {activeFileId && activeFileUrl && activeFileUrl.endsWith('.pdf') && (
+                                  <div className="flex-1 flex flex-col rounded-3xl overflow-hidden border border-slate-200 shadow-inner bg-slate-100 flex-none w-1/2 animate-slide-in">
+                                    <div className="h-10 bg-slate-50 border-b border-slate-200 flex items-center px-4 shrink-0 shadow-sm z-10">
+                                      <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-rose-500"></div><span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">PDF Source Reference (Read-only)</span></div>
+                                    </div>
+                                    <iframe src={activeFileUrl.startsWith('http') ? activeFileUrl.replace('8000', '8001') : `http://localhost:8001${activeFileUrl}`} className="w-full flex-1 border-none" title="PDF Preview" />
+                                  </div>
                                 )}
                               </div>
                             </div>
@@ -929,12 +942,110 @@ const StudentWorkspace = () => {
           </div>
         </Modal>
 
-        {/* --- 敬请期待模态框 --- */}
-        <Modal open={showFinanceModal || showPitchModal} onCancel={() => { setShowFinanceModal(false); setShowPitchModal(false); }} footer={null} centered width={400} className="premium-modal no-border-modal">
-          <div className="p-8 text-center flex flex-col items-center gap-4">
-            <div className="w-16 h-16 rounded-full bg-slate-50 text-slate-300 flex items-center justify-center text-3xl"><SettingOutlined spin /></div>
-            <div><h3 className="text-lg font-black text-slate-800 m-0 mb-1">该模块正在持续研发中</h3><p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Under Construction</p></div>
-            <Button onClick={() => { setShowFinanceModal(false); setShowPitchModal(false); }} shape="round" className="mt-4 bg-slate-100 border-none font-black text-slate-600 px-8">我知道了</Button>
+        {/* --- 简易财务推演 --- */}
+        <Modal open={showFinanceModal} onCancel={() => setShowFinanceModal(false)} footer={null} centered width={800} className="premium-modal no-border-modal">
+          <div className="p-8">
+            <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center gap-3"><div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-500 text-2xl"><RadarChartOutlined /></div><div><h3 className="text-xl font-black text-slate-800 mb-0">盈亏平衡分析模型</h3><span className="text-[10px] uppercase font-bold tracking-widest text-emerald-500">Financial Breakeven Point</span></div></div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-8">
+              <div className="space-y-6">
+                <div className="space-y-4">
+                   <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">预估核心用户基数 / 月</label><Input type="number" value={financeData.users} onChange={e => setFinanceData({...financeData, users: Number(e.target.value)})} className="h-12 rounded-xl bg-slate-50 border-none px-4 font-black text-slate-700" /></div>
+                   <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">获客成本 (CAC) / 人</label><Input type="number" value={financeData.cac} onChange={e => setFinanceData({...financeData, cac: Number(e.target.value)})} prefix="¥" className="h-12 rounded-xl bg-slate-50 border-none px-4 font-black" /></div>
+                   <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">ARPU 单客收入 / 月</label><Input type="number" value={financeData.arpu} onChange={e => setFinanceData({...financeData, arpu: Number(e.target.value)})} prefix="¥" className="h-12 rounded-xl bg-slate-50 border-none px-4 font-black" /></div>
+                   <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">硬性固定成本 / 月</label><Input type="number" value={financeData.fixedCost} onChange={e => setFinanceData({...financeData, fixedCost: Number(e.target.value)})} prefix="¥" className="h-12 rounded-xl bg-slate-50 border-none px-4 font-black" /></div>
+                </div>
+              </div>
+              <div className="bg-slate-900 rounded-[32px] p-8 text-white relative overflow-hidden flex flex-col justify-center">
+                 <div className="absolute top-0 right-0 w-40 h-40 bg-emerald-500/20 blur-[50px] rounded-full"></div>
+                 <h4 className="text-[11px] uppercase tracking-[0.2em] text-emerald-400 font-black mb-6">AI 测算结果洞察</h4>
+                 
+                 <div className="space-y-6">
+                    <div className="flex justify-between items-center pb-4 border-b border-white/10">
+                      <span className="text-slate-400 text-sm font-bold">月度总营收</span>
+                      <span className="text-2xl font-black">¥ {(financeData.users * financeData.arpu).toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between items-center pb-4 border-b border-white/10">
+                      <span className="text-slate-400 text-sm font-bold">月度总成本</span>
+                      <span className="text-2xl font-black">¥ {(financeData.fixedCost + (financeData.users * financeData.cac)).toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between items-end pt-2">
+                       <span className="text-slate-400 text-sm font-bold">净利润 (Net Profit)</span>
+                       <div className="text-right">
+                         <span className={`text-4xl font-black ${(financeData.users * financeData.arpu) - (financeData.fixedCost + (financeData.users * financeData.cac)) > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>¥ {((financeData.users * financeData.arpu) - (financeData.fixedCost + (financeData.users * financeData.cac))).toLocaleString()}</span>
+                       </div>
+                    </div>
+                 </div>
+                 <div className="mt-8 text-[10px] text-slate-400 leading-relaxed font-bold bg-white/5 p-4 rounded-xl">
+                   💡 {((financeData.users * financeData.arpu) - (financeData.fixedCost + (financeData.users * financeData.cac))) > 0 ? '商业模式已达到初步模型测算的盈亏平衡点，具有较强的长效可持续性。建议进一步考虑规模效应带来的边际成本递减规律，优化上游供应链。' : '目前该商业模型处于亏损区间。在参加互联网+等侧重商业落地的赛事中，极易受到评委质疑。建议进一步降低 CAC 获取高净值用户，或探索跨界 IP 等多元化营收路径提升 ARPU 空间。'}
+                 </div>
+              </div>
+            </div>
+          </div>
+        </Modal>
+
+        {/* --- 全真路演模拟 --- */}
+        <Modal open={showPitchModal} onCancel={() => { setShowPitchModal(false); setIsPitching(false); setPitchTime(300); }} footer={null} centered width={1000} className="premium-modal no-border-modal bg-transparent shadow-none" modalRender={(node) => (<div className="modal-content-wrapper">{node}</div>)}>
+          <div className="bg-slate-950 rounded-[40px] overflow-hidden border border-white/10 shadow-2xl relative text-white flex flex-col h-[650px] shadow-indigo-900/40">
+             {/* 顶部横幅 */}
+             <div className="h-16 border-b border-white/10 flex items-center justify-between px-8 bg-black/40 shrink-0">
+               <div className="flex items-center gap-3"><div className={`w-2.5 h-2.5 rounded-full ${isPitching ? 'bg-rose-500 animate-pulse' : 'bg-slate-500'}`}></div><span className={`font-black tracking-[0.2em] text-[11px] uppercase ${isPitching ? 'text-rose-500' : 'text-slate-500'}`}>Live Pitch Mode</span></div>
+               <div className="font-mono text-3xl font-black text-white tracking-widest">{Math.floor(pitchTime / 60).toString().padStart(2, '0')}:{(pitchTime % 60).toString().padStart(2, '0')}</div>
+               <Button onClick={() => { setIsPitching(!isPitching); if (!isPitching) message.info('路演计时开始！深呼吸，准备迎接提问。'); }} shape="round" className={`border-none font-black px-6 shadow-lg ${isPitching ? 'bg-rose-500 text-white hover:bg-rose-600' : 'bg-indigo-500 text-white hover:bg-indigo-600'}`}>{isPitching ? '中止路演' : '进入备赛计时状态'}</Button>
+             </div>
+             
+             {/* 主视野 */}
+             <div className="flex-1 flex">
+               <div className="flex-[2] border-r border-white/10 p-10 flex flex-col justify-between relative bg-gradient-to-br from-slate-900 to-black overflow-hidden">
+                 <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
+                 
+                 {/* Virtual Stage View */}
+                 <div className="relative z-10 flex flex-col items-center justify-center h-full text-center">
+                    <div className="w-32 h-32 rounded-full border-4 border-slate-800 bg-slate-900 flex flex-col items-center justify-center mb-6 shadow-2xl shadow-indigo-500/20">
+                      <TeamOutlined className="text-4xl text-slate-600 mb-2" />
+                      <span className="text-[9px] font-black uppercase text-slate-500 tracking-widest">Presenter</span>
+                    </div>
+                    <h2 className="text-3xl font-black tracking-tight text-white mb-4">{(syncData.projects || []).find(p => p.id === activeProjectId)?.name || '未命名演示项目剧场'}</h2>
+                    <p className="text-slate-400 font-medium max-w-sm mx-auto leading-relaxed">全息路演极压模拟环境已开启，大赛 AI 智库评委已落座核心席位。您有 5 分钟时间，请在限时内完成对商业模式闭环的现场讲演。</p>
+                 </div>
+               </div>
+               
+               {/* 评委聊天框 */}
+               <div className="flex-[1.2] bg-slate-950 flex flex-col relative z-20">
+                 <div className="p-5 border-b border-white/10 flex items-center gap-3 bg-black/40">
+                   <Avatar src="https://api.dicebear.com/7.x/avataaars/svg?seed=Investor" className="bg-amber-100" />
+                   <div>
+                     <p className="text-sm font-black m-0 text-white tracking-widest">VentureCapital AI</p>
+                     <p className="text-[9px] text-amber-500 font-bold uppercase tracking-widest m-0">虚拟主评委 (评委席一栏)</p>
+                   </div>
+                 </div>
+                 <div className="flex-1 p-6 overflow-y-auto space-y-6 custom-scrollbar bg-slate-900/60">
+                    {isPitching ? (
+                      <div className="flex flex-col gap-6 animate-fade-in">
+                        <div className="flex flex-col items-start gap-2 max-w-[95%]">
+                          <span className="text-[10px] text-slate-500 font-bold ml-1">答辩环节 00:30 (基于您的项目文档)</span>
+                          <div className="bg-slate-800 p-4 rounded-2xl rounded-tl-none text-sm text-slate-200 leading-relaxed border border-slate-700 shadow-md">您好，请开始您的路演。我们更想听听，相比于已经在市场上拿到份额的巨头，你们项目最重要的壁垒和护城河究竟是什么？</div>
+                        </div>
+                        <div className="flex flex-col items-start gap-2 max-w-[95%] animate-fade-in" style={{animationDelay: '10s'}}>
+                          <span className="text-[10px] text-slate-500 font-bold ml-1">压力追问 02:15</span>
+                          <div className="bg-slate-800 p-4 rounded-2xl rounded-tl-none text-sm text-slate-200 leading-relaxed border border-rose-900/50 shadow-md shadow-rose-900/10">刚才提到的获客渠道似乎过于理想化。如果在早期缺乏流量杠杆的情况下，你们预期的冷启动 CAC (获客成本) 如果翻了一倍，你们的现金流还能不能运转？</div>
+                        </div>
+                        <div className="flex flex-col items-start gap-2 max-w-[95%] animate-fade-in" style={{animationDelay: '20s'}}>
+                          <span className="text-[10px] text-slate-500 font-bold ml-1">技术复核 03:40</span>
+                          <div className="bg-slate-800 p-4 rounded-2xl rounded-tl-none text-sm text-slate-200 leading-relaxed border border-slate-700 shadow-md">技术方案中的某些参数没有第三方权威检测报告。在省赛、国赛阶段，专家们不会只听描述，你们团队有什么核心背书来证明技术成熟度？</div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="h-full flex items-center justify-center text-center flex-col gap-4">
+                        <div className="w-14 h-14 bg-white/5 rounded-2xl flex items-center justify-center text-slate-600 text-2xl shadow-inner"><MessageOutlined /></div>
+                        <span className="text-[10px] uppercase tracking-widest font-black text-slate-400 max-w-[200px]">点击顶部【进入备赛计时状态】按钮以激活 AI 毒舌评委席的现场随机追问</span>
+                      </div>
+                    )}
+                 </div>
+               </div>
+             </div>
           </div>
         </Modal>
 
