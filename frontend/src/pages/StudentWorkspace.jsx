@@ -171,10 +171,24 @@ const StudentWorkspace = () => {
       if (proj) {
         setEditorContent(proj.content || "");
         setActiveFileId(null);
+        setActiveFileUrl(null);
         fetchProjectFiles(activeProjectId);
       }
     }
   }, [activeProjectId, syncData.projects]);
+
+  useEffect(() => {
+    let interval;
+    if (isPitching && pitchTime > 0) {
+      interval = setInterval(() => {
+        setPitchTime(prev => prev - 1);
+      }, 1000);
+    } else if (pitchTime === 0 && isPitching) {
+      setIsPitching(false);
+      message.info('路演时间已到！请停止答辩。');
+    }
+    return () => clearInterval(interval);
+  }, [isPitching, pitchTime]);
 
   const fetchProjectFiles = async (id) => {
     try {
@@ -704,7 +718,7 @@ const StudentWorkspace = () => {
                                 </div>
                                 
                                 {/* 右栏：原文件参照预览 (当有选中且为 PDF 时) */}
-                                {activeFileId && activeFileUrl && activeFileUrl.endsWith('.pdf') && (
+                                {activeFileUrl && activeFileUrl.toLowerCase().endsWith('.pdf') && (
                                   <div className="flex-1 flex flex-col rounded-3xl overflow-hidden border border-slate-200 shadow-inner bg-slate-100 flex-none w-1/2 animate-slide-in">
                                     <div className="h-10 bg-slate-50 border-b border-slate-200 flex items-center px-4 shrink-0 shadow-sm z-10">
                                       <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-rose-500"></div><span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">PDF Source Reference (Read-only)</span></div>
@@ -1024,18 +1038,24 @@ const StudentWorkspace = () => {
                  <div className="flex-1 p-6 overflow-y-auto space-y-6 custom-scrollbar bg-slate-900/60">
                     {isPitching ? (
                       <div className="flex flex-col gap-6 animate-fade-in">
-                        <div className="flex flex-col items-start gap-2 max-w-[95%]">
-                          <span className="text-[10px] text-slate-500 font-bold ml-1">答辩环节 00:30 (基于您的项目文档)</span>
-                          <div className="bg-slate-800 p-4 rounded-2xl rounded-tl-none text-sm text-slate-200 leading-relaxed border border-slate-700 shadow-md">您好，请开始您的路演。我们更想听听，相比于已经在市场上拿到份额的巨头，你们项目最重要的壁垒和护城河究竟是什么？</div>
-                        </div>
-                        <div className="flex flex-col items-start gap-2 max-w-[95%] animate-fade-in" style={{animationDelay: '10s'}}>
-                          <span className="text-[10px] text-slate-500 font-bold ml-1">压力追问 02:15</span>
-                          <div className="bg-slate-800 p-4 rounded-2xl rounded-tl-none text-sm text-slate-200 leading-relaxed border border-rose-900/50 shadow-md shadow-rose-900/10">刚才提到的获客渠道似乎过于理想化。如果在早期缺乏流量杠杆的情况下，你们预期的冷启动 CAC (获客成本) 如果翻了一倍，你们的现金流还能不能运转？</div>
-                        </div>
-                        <div className="flex flex-col items-start gap-2 max-w-[95%] animate-fade-in" style={{animationDelay: '20s'}}>
-                          <span className="text-[10px] text-slate-500 font-bold ml-1">技术复核 03:40</span>
-                          <div className="bg-slate-800 p-4 rounded-2xl rounded-tl-none text-sm text-slate-200 leading-relaxed border border-slate-700 shadow-md">技术方案中的某些参数没有第三方权威检测报告。在省赛、国赛阶段，专家们不会只听描述，你们团队有什么核心背书来证明技术成熟度？</div>
-                        </div>
+                        {pitchTime <= 270 && (
+                          <div className="flex flex-col items-start gap-2 max-w-[95%] animate-slide-in">
+                            <span className="text-[10px] text-slate-500 font-bold ml-1">答辩环节 00:30 (基于您的项目文档)</span>
+                            <div className="bg-slate-800 p-4 rounded-2xl rounded-tl-none text-sm text-slate-200 leading-relaxed border border-slate-700 shadow-md">您好，请开始您的路演。我们更想听听，相比于已经在市场上拿到份额的巨头，你们项目最重要的壁垒和护城河究竟是什么？</div>
+                          </div>
+                        )}
+                        {pitchTime <= 195 && (
+                          <div className="flex flex-col items-start gap-2 max-w-[95%] animate-slide-in">
+                            <span className="text-[10px] text-slate-500 font-bold ml-1">压力追问 02:15</span>
+                            <div className="bg-slate-800 p-4 rounded-2xl rounded-tl-none text-sm text-slate-200 leading-relaxed border border-rose-900/50 shadow-md shadow-rose-900/10">刚才提到的获客渠道似乎过于理想化。如果在早期缺乏流量杠杆的情况下，你们预期的冷启动 CAC (获客成本) 如果翻了一倍，你们的现金流还能不能运转？</div>
+                          </div>
+                        )}
+                        {pitchTime <= 80 && (
+                          <div className="flex flex-col items-start gap-2 max-w-[95%] animate-slide-in">
+                            <span className="text-[10px] text-slate-500 font-bold ml-1">技术复核 03:40</span>
+                            <div className="bg-slate-800 p-4 rounded-2xl rounded-tl-none text-sm text-slate-200 leading-relaxed border border-slate-700 shadow-md">技术方案中的某些参数没有第三方权威检测报告。在省赛、国赛阶段，专家们不会只听描述，你们团队有什么核心背书来证明技术成熟度？</div>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="h-full flex items-center justify-center text-center flex-col gap-4">
