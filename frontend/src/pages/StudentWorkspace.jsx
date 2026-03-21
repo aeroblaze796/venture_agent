@@ -680,57 +680,57 @@ const StudentWorkspace = () => {
                       <div className="absolute top-0 left-0 w-2 h-full bg-indigo-500/10 z-0"></div>
                       <div className="flex-1 p-12 z-10 flex flex-col">
                         {editorContent ? (
-                          <div className="flex-1 flex gap-8 min-h-[700px] w-full">
-                            {/* 左侧：始终为编辑区 */}
-                            <div className="flex-[4] flex flex-col bg-slate-50/50 rounded-3xl border border-slate-200 shadow-inner p-8 relative">
-                               <div className="flex items-center justify-between mb-6">
-                                 <div className="flex flex-col"><span className="text-xl font-black text-slate-800 tracking-tight">Venture Editor 大纲区</span><span className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-widest">Drafting & Outline</span></div>
-                                 {isSaving && <span className="text-[10px] text-indigo-400 font-black animate-pulse uppercase bg-indigo-50 px-3 py-1 rounded-full absolute top-8 right-8">Saving...</span>}
-                               </div>
-                               <textarea className="flex-1 w-full h-full bg-transparent text-sm leading-relaxed text-slate-600 font-medium resize-none outline-none focus:border-indigo-300 transition-all custom-scrollbar" value={editorContent} onChange={e => setEditorContent(e.target.value)} placeholder="所选文档的内容草稿将在此显示..." />
-                            </div>
-
-                            {/* 右侧：附录面板 & 预览器 */}
-                            <div className="flex-[3] flex flex-col gap-6">
-                              {/* 管理器 */}
-                              <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm flex flex-col gap-4 relative overflow-hidden shrink-0">
-                                <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-full blur-3xl -z-10 mt-[-30px] mr-[-30px]"></div>
-                                <div className="flex items-center justify-between">
-                                  <div className="flex flex-col">
-                                    <span className="text-md font-black text-slate-800 tracking-tight flex items-center gap-2"><FolderOpenOutlined className="text-indigo-500" />远端归档附录架</span>
-                                    <span className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-widest">File Manager</span>
-                                  </div>
-                                  <Button icon={<CloudUploadOutlined />} onClick={() => setShowImportModal(true)} shape="round" size="small" className="bg-indigo-50 border-none text-indigo-600 font-bold hover:bg-indigo-100">导入文档</Button>
+                          <div className="prose prose-slate max-w-none flex-1 flex flex-col">
+                            {/* 工具栏与多文件标签 */}
+                              <div className="flex items-center justify-between mb-4">
+                                <div className="flex flex-col">
+                                  <span className="text-xl font-black text-slate-800 tracking-tight">项目归档附录</span>
+                                  <span className="text-xs text-slate-400 font-bold mt-1">云端附件列表 (PDF/Docx)</span>
                                 </div>
-                                <div className="w-full overflow-x-auto pb-2 no-scrollbar flex gap-2 items-center min-h-[40px]">
-                                  {projectFiles.length > 0 ? projectFiles.map(file => (
-                                    <div key={file.id} onClick={() => { setActiveFileId(file.id); setActiveFileUrl(file.file_url); }} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all cursor-pointer whitespace-nowrap shrink-0 max-w-[140px] ${activeFileId === file.id ? 'bg-indigo-500 border-indigo-500 text-white shadow-md' : 'bg-slate-50 border-slate-200 hover:border-indigo-300'}`}>
-                                      {file.file_type === 'pdf' ? <FilePdfOutlined className={activeFileId === file.id ? 'text-indigo-100' : 'text-rose-500'} /> : <FileWordOutlined className={activeFileId === file.id ? 'text-indigo-100' : 'text-blue-500'} />}
-                                      <Tooltip title={file.filename}><span className={`text-[10px] font-black truncate w-full ${activeFileId === file.id ? 'text-white' : 'text-slate-600'}`}>{file.filename}</span></Tooltip>
-                                      <Popconfirm title="确定删除？" onConfirm={(e) => { e.stopPropagation(); handleDeleteFile(file.id, file.file_url); }} okText="确定" cancelText="取消">
-                                        <CloseOutlined onClick={e => e.stopPropagation()} className={`text-[9px] hover:text-rose-500 ml-1 font-bold ${activeFileId === file.id ? 'text-indigo-200' : 'text-slate-300'}`} />
-                                      </Popconfirm>
-                                    </div>
-                                  )) : <span className="text-[10px] text-slate-400 font-bold italic w-full">暂无关联附件</span>}
+                                <div className="flex items-center gap-3">
+                                  {isSaving && <span className="text-[10px] text-indigo-400 font-black animate-pulse uppercase">Saving...</span>}
+                                  <Button icon={<CloudUploadOutlined />} onClick={() => setShowImportModal(true)} shape="round" className="bg-slate-50 border border-slate-200 text-slate-600 hover:border-indigo-300 font-bold shadow-sm">追加附件文档</Button>
                                 </div>
                               </div>
 
-                              {/* 预览器 */}
-                              <div className="flex-1 bg-slate-100 rounded-3xl border border-slate-200 shadow-inner overflow-hidden flex flex-col relative min-h-[500px]">
-                                <div className="h-10 bg-slate-50/80 backdrop-blur-md border-b border-slate-200 flex items-center px-4 shrink-0 shadow-sm z-10">
-                                  <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-emerald-500"></div><span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">100% 物理视图 Iframe 渲染器</span></div>
+                              {/* 横向附件 Chips 列表 */}
+                              <div className="w-full overflow-x-auto pb-4 no-scrollbar border-b border-indigo-50 flex gap-3 items-center min-h-[50px]">
+                                {projectFiles.length > 0 ? projectFiles.map(file => (
+                                  <div
+                                    key={file.id}
+                                    onClick={() => { setActiveFileId(file.id); setActiveFileUrl(file.file_url); }}
+                                    className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all cursor-pointer whitespace-nowrap shrink-0 max-w-[160px] ${activeFileId === file.id ? 'bg-indigo-50 border-indigo-200 shadow-sm' : 'bg-white border-slate-200 hover:border-indigo-300 hover:bg-slate-50'}`}
+                                  >
+                                    {file.file_type === 'pdf' ? <FilePdfOutlined className={activeFileId === file.id ? 'text-rose-500' : 'text-slate-400'} /> : <FileWordOutlined className={activeFileId === file.id ? 'text-blue-500' : 'text-slate-400'} />}
+                                    <Tooltip title={file.filename}><span className={`text-[11px] font-black truncate w-full ${activeFileId === file.id ? 'text-white' : 'text-slate-600'}`}>{file.filename}</span></Tooltip>
+                                    <Popconfirm title="确定删除该附件？" onConfirm={(e) => { e.stopPropagation(); handleDeleteFile(file.id, file.file_url); }} okText="删除" cancelText="取消">
+                                      <CloseOutlined onClick={e => e.stopPropagation()} className="text-[9px] text-slate-300 hover:text-rose-500 ml-1 font-bold" />
+                                    </Popconfirm>
+                                  </div>
+                                )) : <span className="text-[11px] text-slate-400 font-bold italic w-full text-center">系统检测到暂无关联原始附件</span>}
+                              </div>
+
+                              {/* 内容预览或编辑区 - 响应式分栏布局 */}
+                              <div className="flex-1 mt-6 relative flex gap-6 min-h-[600px]">
+                                {/* 左栏：项目正文编辑区 */}
+                                <div className="flex-1 rounded-3xl overflow-hidden border border-slate-200 shadow-inner group flex flex-col">
+                                  <div className="h-10 bg-slate-50 border-b border-slate-200 flex items-center px-4 shrink-0 shadow-sm z-10 justify-between">
+                                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">编辑工作区 (Editor)</span>
+                                  </div>
+                                  <textarea className="w-full flex-1 bg-slate-50/50 p-8 text-sm leading-relaxed text-slate-600 font-medium resize-none outline-none focus:bg-white focus:border-indigo-300 transition-all custom-scrollbar" value={editorContent} onChange={e => setEditorContent(e.target.value)} placeholder="所选文档的内容草稿将在此显示，您可以手动合并或润色..." />
                                 </div>
-                                {activeFileUrl && activeFileUrl.toLowerCase().endsWith('.pdf') ? (
-                                  <iframe src={activeFileUrl.startsWith('http') ? activeFileUrl.replace('8000', '8001') : `http://localhost:8001${activeFileUrl}`} className="w-full h-full flex-1 border-none" title="PDF Preview" />
-                                ) : (
-                                   <div className="h-full flex-1 flex items-center justify-center opacity-40 flex-col gap-4 text-center p-8 bg-slate-50/50">
-                                     <FileSearchOutlined className="text-4xl text-slate-400" />
-                                     <span className="text-xs font-black text-slate-500 tracking-widest leading-relaxed">请在上方选择有效的 PDF 源文件以激活渲染器</span>
-                                   </div>
+                                
+                                {/* 右栏：原文件参照预览 (当有选中且为 PDF 时) */}
+                                {activeFileUrl && activeFileUrl.toLowerCase().endsWith('.pdf') && (
+                                  <div className="flex-1 flex flex-col rounded-3xl overflow-hidden border border-slate-200 shadow-inner bg-slate-100 flex-none w-1/2 animate-slide-in">
+                                    <div className="h-10 bg-slate-50 border-b border-slate-200 flex items-center px-4 shrink-0 shadow-sm z-10">
+                                      <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-rose-500"></div><span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">PDF Source Reference (Read-only)</span></div>
+                                    </div>
+                                    <iframe src={activeFileUrl.startsWith('http') ? activeFileUrl.replace('8000', '8001') : `http://localhost:8001${activeFileUrl}`} className="w-full flex-1 border-none" title="PDF Preview" />
+                                  </div>
                                 )}
                               </div>
                             </div>
-                          </div>
                         ) : (
                           <div className="h-full flex flex-col items-center justify-center py-24 text-center space-y-8">
                             <div className="w-24 h-24 bg-slate-50 rounded-[35%] flex items-center justify-center text-slate-200 text-5xl animate-pulse shadow-inner"><FileTextOutlined /></div>
