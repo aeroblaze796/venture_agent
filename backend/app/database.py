@@ -164,24 +164,6 @@ def migrate_db():
         FOREIGN KEY (project_id) REFERENCES projects(id)
     )
     """)
-
-    # 创建 / 迁移项目附件表
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS project_files (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        project_id INTEGER,
-        filename TEXT NOT NULL,
-        file_url TEXT NOT NULL,
-        uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (project_id) REFERENCES projects(id)
-    )
-    """)
-    
-    cursor.execute("PRAGMA table_info(project_files)")
-    pf_cols = [row[1] for row in cursor.fetchall()]
-    if "file_url" not in pf_cols and len(pf_cols) > 0:
-        cursor.execute("ALTER TABLE project_files ADD COLUMN file_url TEXT NOT NULL DEFAULT ''")
-        
     conn.commit()
     conn.close()
 
@@ -227,10 +209,6 @@ def get_dashboard_data(user_id: str):
     # 5. 获取项目提交日志 (Commits)
     cursor.execute(f"SELECT * FROM project_commits WHERE project_id IN ({placeholders}) ORDER BY timestamp DESC", project_ids)
     commits = [dict(row) for row in cursor.fetchall()]
-
-    # 6. 获取项目静态附件 (Files)
-    cursor.execute(f"SELECT * FROM project_files WHERE project_id IN ({placeholders}) ORDER BY created_at DESC", project_ids)
-    files = [dict(row) for row in cursor.fetchall()]
     
     conn.close()
     return {
@@ -238,8 +216,7 @@ def get_dashboard_data(user_id: str):
         "deadlines": ddls,
         "evolution_logs": logs,
         "members": members,
-        "commits": commits,
-        "project_files": files
+        "commits": commits
     }
 
 # --- 会话管理函数 ---

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import dayjs from "dayjs";
 import ReactMarkdown from "react-markdown";
-import { Calendar, Timeline, Badge, Tooltip, Avatar, ConfigProvider, Modal, Button, Select, Popover, List, Steps, message, Input, Space, Divider, Empty, Popconfirm } from "antd";
+import { Calendar, Timeline, Badge, Tooltip, Avatar, ConfigProvider, Modal, Button, Select, Popover, List, Steps, message, Input, Space, Divider, Empty, Popconfirm, Progress } from "antd";
 import {
   RocketOutlined,
   FileTextOutlined,
@@ -28,7 +28,15 @@ import {
   GlobalOutlined,
   BulbOutlined,
   EnvironmentOutlined,
-  NotificationOutlined
+  NotificationOutlined,
+  StarOutlined,
+  CheckCircleOutlined,
+  ClockCircleOutlined,
+  FilePdfOutlined,
+  FileWordOutlined,
+  DashboardOutlined,
+  FolderOpenOutlined,
+  FileSearchOutlined
 } from "@ant-design/icons";
 import "./VentureDashboard.css";
 
@@ -72,18 +80,24 @@ const StudentWorkspace = () => {
   const [history, setHistory] = useState([]);
   const [activeSessionId, setActiveSessionId] = useState(null);
   const [chatLog, setChatLog] = useState([]);
+  const [editingSessionId, setEditingSessionId] = useState(null);
+  const [editSessionTitle, setEditSessionTitle] = useState("");
 
   const [activeProjectId, setActiveProjectId] = useState(null);
-  const [showNewProjectModal, setShowNewProjectModal] = useState(false);
-  const [showImportModal, setShowImportModal] = useState(false);
+  const [projectFiles, setProjectFiles] = useState([]);
+  const [activeFileId, setActiveFileId] = useState(null);
+  const [activeFileUrl, setActiveFileUrl] = useState(null);
   const [editorContent, setEditorContent] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef(null);
 
   const [showLogModal, setShowLogModal] = useState(false);
   const [showReviewModal, setShowReviewModal] = useState(false);
-  const [activeReview, setActiveReview] = useState("");
-  const [isReviewing, setIsReviewing] = useState(false);
+  const [reviewResult, setReviewResult] = useState("");
+  const [reviewLoading, setReviewLoading] = useState(false);
+  // Aliases for JSX compatibility
+  const isReviewing = reviewLoading;
+  const activeReview = reviewResult;
   const [newLogContent, setNewLogContent] = useState("");
 
   const [currentStep, setCurrentStep] = useState(0);
@@ -91,6 +105,8 @@ const StudentWorkspace = () => {
   const [projectForm, setProjectForm] = useState({
     name: '', competition: '互联网+', track: '高教主赛道', college: '', advisorName: '', advisorInfo: '', members: []
   });
+  const [showNewProjectModal, setShowNewProjectModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
 
   const [editingProjectId, setEditingProjectId] = useState(null);
   const [editProjectTitle, setEditProjectTitle] = useState("");
@@ -103,45 +119,85 @@ const StudentWorkspace = () => {
   const fetchDashboardData = async () => {
     const username = localStorage.getItem("va_username") || "1120230571";
     try {
-      const res = await fetch(`http://localhost:8000/api/sync/dashboard?user_id=${username}`);
+      const res = await fetch(`http://localhost:8001/api/sync/dashboard?user_id=${username}`);
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
-      setSyncData(data);
-      if (activeProjectId) {
-        const curProj = data.projects.find(p => p.id === activeProjectId);
-        if (curProj) setEditorContent(curProj.content || "");
+      if (data && data.projects) {
+        setSyncData(data);
+        if (activeProjectId) {
+          const curProj = (data.projects || []).find(p => p.id === activeProjectId);
+          if (curProj) setEditorContent(curProj.content || "");
+        }
       }
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error("fetchDashboardData failed:", e);
+    }
   };
 
   useEffect(() => {
     const initData = async () => {
       const username = localStorage.getItem("va_username") || "1120230571";
-      await fetchDashboardData();
       try {
-        const res = await fetch(`http://localhost:8000/api/conversations?user_id=${username}`);
-        const convs = await res.json();
-        if (convs.length > 0) {
-          setHistory(convs);
-          handleSessionSwitch(convs[0].id);
-        } else { handleNewChat(); }
-      } catch (e) { console.error(e); }
+        await fetchDashboardData();
+        const res = await fetch(`http://localhost:8001/api/conversations?user_id=${username}`);
+        if (res.ok) {
+          const convs = await res.json();
+          if (Array.isArray(convs) && convs.length > 0) {
+            setHistory(convs);
+            handleSessionSwitch(convs[0].id);
+          } else { handleNewChat(); }
+        }
+      } catch (e) {
+        console.error("initData failed:", e);
+      }
     };
     initData();
   }, []);
 
   useEffect(() => {
     if (activeProjectId) {
-      const proj = syncData.projects.find(p => p.id === activeProjectId);
-      setEditorContent(proj?.content || "");
+      const proj = (syncData.projects || []).find(p => p.id === activeProjectId);
+      if (proj) {
+        setEditorContent(proj.content || "");
+        setActiveFileId(null);
+        fetchProjectFiles(activeProjectId);
+      }
     }
-  }, [activeProjectId]);
+  }, [activeProjectId, syncData.projects]);
+
+  const fetchProjectFiles = async (id) => {
+    try {
+      const res = await fetch(`http://localhost:8001/api/projects/${id}/files`);
+      if (res.ok) {
+        const files = await res.json();
+        setProjectFiles(files);
+      }
+    } catch (e) { console.error("Fetch files failed:", e); }
+  };
+
+  const handleFileTabChange = async (fileId) => {
+    if (fileId === null) {
+      const proj = (syncData.projects || []).find(p => p.id === activeProjectId);
+      setEditorContent(proj?.content || "");
+      setActiveFileId(null);
+    } else {
+      try {
+        const res = await fetch(`http://localhost:8001/api/projects/${activeProjectId}/files/${fileId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setEditorContent(data.content);
+          setActiveFileId(fileId);
+        }
+      } catch (e) { message.error("获取文件内容失败"); }
+    }
+  };
 
   const handleNewChat = async () => {
     const username = localStorage.getItem("va_username") || "1120230571";
     const newId = `va_session_${username}_${Date.now()}`;
     const greeting = '你好！我是你的项目助手。今天有什么新灵感或者进展想聊聊吗？';
     try {
-      await fetch("http://localhost:8000/api/conversations", {
+      await fetch("http://localhost:8001/api/conversations", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: newId, user_id: username, title: '新灵感会话', greeting })
       });
@@ -152,12 +208,49 @@ const StudentWorkspace = () => {
   };
 
   const handleSessionSwitch = async (id) => {
+    if (!id) return;
     setActiveSessionId(id);
     try {
-      const res = await fetch(`http://localhost:8000/api/conversations/${id}/messages`);
-      const msgs = await res.json();
-      setChatLog(msgs);
-    } catch (err) { console.error(err); }
+      const res = await fetch(`http://localhost:8001/api/conversations/${id}/messages`);
+      if (res.ok) {
+        const msgs = await res.json();
+        setChatLog(Array.isArray(msgs) ? msgs : []);
+      }
+    } catch (err) {
+      console.error(err);
+      message.error("获取会话消息失败");
+    }
+  };
+
+  const handleRenameSession = async () => {
+    if (!editSessionTitle.trim() || !editingSessionId) return;
+    try {
+      await fetch(`http://localhost:8001/api/conversations/${editingSessionId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: editSessionTitle })
+      });
+      setHistory(prev => prev.map(s => s.id === editingSessionId ? { ...s, title: editSessionTitle } : s));
+      setEditingSessionId(null);
+      message.success("会话重命名成功。");
+    } catch (e) { console.error(e); }
+  };
+
+  const handleDeleteSession = async (id) => {
+    try {
+      await fetch(`http://localhost:8001/api/conversations/${id}`, { method: 'DELETE' });
+      setHistory(prev => prev.filter(s => s.id !== id));
+      if (activeSessionId === id) { setChatLog([]); setActiveSessionId(null); }
+      message.success("会话已删除。");
+    } catch (e) { console.error(e); }
+  };
+
+  const handleDeleteFile = async (fileId, fileUrl) => {
+    try {
+      await fetch(`http://localhost:8001/api/project-files/${fileId}`, { method: 'DELETE' });
+      if (activeFileUrl === fileUrl) setActiveFileUrl(null);
+      await fetchDashboardData();
+      message.success('附件已删除');
+    } catch (_e) { message.error('删除失败'); }
   };
 
   const handleSend = async () => {
@@ -184,14 +277,18 @@ const StudentWorkspace = () => {
     if (!activeProjectId) return;
     setIsSaving(true);
     try {
-      await fetch(`http://localhost:8000/api/projects/${activeProjectId}/content`, {
+      const res = await fetch(`http://localhost:8001/api/projects/${activeProjectId}/content`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content })
       });
-      setSyncData(prev => ({
-        ...prev, projects: prev.projects.map(p => p.id === activeProjectId ? { ...p, content } : p)
-      }));
-    } catch (e) { console.error(e); } finally { setIsSaving(false); }
+      if (res.ok) {
+        setSyncData(prev => ({
+          ...prev, projects: (prev.projects || []).map(p => p.id === activeProjectId ? { ...p, content } : p)
+        }));
+      }
+    } catch (e) {
+      console.error("Save content failed:", e);
+    } finally { setIsSaving(false); }
   };
 
   const handleFileImport = async (e) => {
@@ -199,19 +296,30 @@ const StudentWorkspace = () => {
     if (!file) return;
     const formData = new FormData();
     formData.append("file", file);
+    if (activeProjectId) formData.append("project_id", activeProjectId);
     const hide = message.loading('解析中...', 0);
     try {
-      const res = await fetch("http://localhost:8000/api/projects/import", { method: "POST", body: formData });
+      const res = await fetch("http://localhost:8001/api/projects/import", { method: "POST", body: formData });
+      if (!res.ok) throw new Error("Upload failed");
       const data = await res.json();
       hide();
       if (data.text) {
         setEditorContent(data.text);
-        if (activeProjectId) await saveContent(data.text);
+        if (data.file_url) setActiveFileUrl(data.file_url);
+        if (activeProjectId) {
+          await fetchProjectFiles(activeProjectId);
+          await fetchDashboardData();
+          setActiveFileId(data.file_id || null);
+        }
         setActivePage('editor');
         setShowImportModal(false);
-        message.success(`解析成功: ${data.filename}`);
+        message.success(`解析并导入成功: ${data.filename}`);
       } else { message.error(data.error || "解析失败"); }
-    } catch (err) { hide(); message.error("文件上传失败"); }
+    } catch (err) {
+      hide();
+      console.error(err);
+      message.error("文件上传解析失败，请检查后端 PDF 解析模块。");
+    }
   };
 
   const isNumeric = (str) => /^\d+$/.test(str.trim());
@@ -251,7 +359,7 @@ const StudentWorkspace = () => {
 
     setIsSaving(true);
     try {
-      const resp = await fetch('http://localhost:8000/api/projects', {
+      const resp = await fetch('http://localhost:8001/api/projects', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...projectForm, content: editorContent, owner_id: localStorage.getItem('va_username') || '1120230571' })
       });
@@ -275,67 +383,84 @@ const StudentWorkspace = () => {
   const handleRenameProject = async () => {
     if (!editProjectTitle.trim() || !editingProjectId) return;
     try {
-      await fetch(`http://localhost:8000/api/projects/${editingProjectId}`, {
+      const res = await fetch(`http://localhost:8001/api/projects/${editingProjectId}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: editProjectTitle })
       });
-      setSyncData(prev => ({
-        ...prev, projects: prev.projects.map(p => p.id === editingProjectId ? { ...p, name: editProjectTitle } : p)
-      }));
-      setEditingProjectId(null);
-      message.success("重命名成功。");
-    } catch (e) { console.error(e); }
+      if (res.ok) {
+        setSyncData(prev => ({
+          ...prev, projects: (prev.projects || []).map(p => p.id === editingProjectId ? { ...p, name: editProjectTitle } : p)
+        }));
+        setEditingProjectId(null);
+        message.success("重命名成功。");
+      }
+    } catch (e) {
+      console.error(e);
+      message.error("重命名失败");
+    }
   };
 
   const handleDeleteProject = async (id) => {
     try {
-      await fetch(`http://localhost:8000/api/projects/${id}`, { method: 'DELETE' });
-      if (activeProjectId === id) { setActiveProjectId(null); setEditorContent(""); }
-      await fetchDashboardData();
-      message.success("项目已删除。");
-    } catch (e) { console.error(e); }
+      const res = await fetch(`http://localhost:8001/api/projects/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        if (activeProjectId === id) { setActiveProjectId(null); setEditorContent(""); }
+        await fetchDashboardData();
+        message.success("项目已删除。");
+      }
+    } catch (e) {
+      console.error(e);
+      message.error("删除项目失败");
+    }
   };
 
   const handleEditMembers = () => {
-    if (!activeProjectId) return;
-    const proj = syncData.projects.find(p => p.id === activeProjectId);
-    const members = syncData.members.filter(m => m.project_id === activeProjectId && m.role !== 'Advisor');
+    if (!activeProjectId || !syncData.projects) return;
+    const proj = (syncData.projects || []).find(p => p.id === activeProjectId);
+    if (!proj) return;
+    const members = (syncData.members || []).filter(m => m.project_id === activeProjectId && m.role !== 'Advisor');
     setProjectForm({
       id: proj.id,
       name: proj.name,
-      competition: proj.competition,
-      track: proj.track,
-      college: proj.college,
-      advisorName: proj.advisor_name,
-      advisorInfo: proj.advisor_info,
-      members: members.map(m => ({ ...m, student_id: m.student_id || '' }))
+      competition: proj.competition || '互联网+',
+      track: proj.track || '',
+      college: proj.college || '',
+      advisorName: proj.advisor_name || '',
+      advisorInfo: proj.advisor_info || '',
+      members: (members || []).map(m => ({ ...m, student_id: m.student_id || '' }))
     });
-    setCurrentStep(2); // 直接跳转到核心团队录入
+    setCurrentStep(2);
     setShowNewProjectModal(true);
   };
 
   const handleAddLog = async () => {
     if (!newLogContent.trim() || !activeProjectId) return;
     try {
-      await fetch(`http://localhost:8000/api/projects/${activeProjectId}/commits`, {
+      const res = await fetch(`http://localhost:8001/api/projects/${activeProjectId}/commits`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: newLogContent, author: localStorage.getItem('va_username') || 'Student' })
       });
-      setNewLogContent("");
-      message.success("提交成功。");
-      await fetchDashboardData();
-    } catch (e) { console.error(e); }
+      if (res.ok) {
+        setNewLogContent("");
+        message.success("提交成功。");
+        await fetchDashboardData();
+      }
+    } catch (e) {
+      console.error(e);
+      message.error("日志提交失败");
+    }
   };
 
   const handleRequestReview = async () => {
     if (!activeProjectId) return;
-    setIsReviewing(true);
+    setReviewLoading(true);
+    setReviewResult("");
     setShowReviewModal(true);
     try {
-      const res = await fetch(`http://localhost:8000/api/projects/${activeProjectId}/review`, { method: 'POST' });
+      const res = await fetch(`http://localhost:8001/api/projects/${activeProjectId}/review`, { method: 'POST' });
       const data = await res.json();
-      setActiveReview(data.review);
-    } catch (e) { console.error(e); } finally { setIsReviewing(false); }
+      setReviewResult(data.review || data.message || "AI 分析完成。");
+    } catch (e) { console.error(e); setReviewResult("AI 诊断服务连接失败，请检查后端 API 是否启动。"); } finally { setReviewLoading(false); }
   };
 
   const addMember = () => { setProjectForm({ ...projectForm, members: [...projectForm.members, { name: '', student_id: '', role: 'Member', position: '队员', college: '', major: '', grade: '', info: '' }] }); };
@@ -409,10 +534,20 @@ const StudentWorkspace = () => {
           <div className="flex-1 overflow-y-auto px-4 pb-6 custom-scrollbar space-y-1.5">
             {activePage === 'chat' ? (
               history.map(s => (
-                <div key={s.id} onClick={() => handleSessionSwitch(s.id)} className={`group p-3.5 rounded-2xl cursor-pointer transition-all border flex items-center justify-between ${activeSessionId === s.id ? 'bg-white shadow-xl shadow-slate-200/50 border-blue-50' : 'hover:bg-slate-50 border-transparent'}`}>
-                  <div className="flex items-center gap-3 overflow-hidden">
+                <div key={s.id} onClick={() => { if (editingSessionId !== s.id) handleSessionSwitch(s.id); }} className={`group p-3.5 rounded-2xl cursor-pointer transition-all border flex items-center justify-between ${activeSessionId === s.id ? 'bg-white shadow-xl shadow-slate-200/50 border-blue-50' : 'hover:bg-slate-50 border-transparent'}`}>
+                  <div className="flex items-center gap-3 overflow-hidden flex-1">
                     <MessageOutlined className={activeSessionId === s.id ? 'text-blue-500' : 'text-slate-300'} />
-                    <span className={`text-[11px] font-bold truncate ${activeSessionId === s.id ? 'text-slate-900' : 'text-slate-500'}`}>{s.title}</span>
+                    {editingSessionId === s.id ? (
+                      <input autoFocus className="text-[11px] font-bold flex-1 bg-blue-50 border-none outline-none rounded px-1 h-6" value={editSessionTitle} onChange={e => setEditSessionTitle(e.target.value)} onBlur={handleRenameSession} onKeyDown={e => e.key === 'Enter' && handleRenameSession()} />
+                    ) : (
+                      <span className={`text-[11px] font-bold truncate ${activeSessionId === s.id ? 'text-slate-900' : 'text-slate-500'}`}>{s.title}</span>
+                    )}
+                  </div>
+                  <div className={`flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity ${editingSessionId === s.id ? 'hidden' : ''}`}>
+                    <EditOutlined onClick={(e) => { e.stopPropagation(); setEditingSessionId(s.id); setEditSessionTitle(s.title); }} className="text-slate-300 hover:text-blue-500 transition-colors text-xs" />
+                    <Popconfirm title="确定删除该会话吗？" onConfirm={(e) => { e && e.stopPropagation(); handleDeleteSession(s.id); }} okText="确定" cancelText="取消">
+                      <DeleteOutlined onClick={(e) => e.stopPropagation()} className="text-slate-300 hover:text-rose-500 transition-colors text-xs" />
+                    </Popconfirm>
                   </div>
                 </div>
               ))
@@ -447,67 +582,170 @@ const StudentWorkspace = () => {
               <Badge count={2} size="small" offset={[-2, 6]}><Button type="text" icon={<BellOutlined className="text-slate-400 text-lg" />} /></Badge>
             </Popover>
           </header>
+
           {activePage === 'chat' ? (
             <>
-              <div className="flex-1 overflow-y-auto px-8 py-10 custom-scrollbar"><div className="max-w-3xl mx-auto space-y-10">{chatLog.map((m, i) => (<div key={i} className={`flex w-full ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}><div className={`flex gap-4 max-w-[90%] ${m.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}><Avatar className="shadow-sm" style={{ backgroundColor: m.role === 'coach' ? '#2563eb' : '#f4f4f5' }} icon={m.role === 'coach' ? <RocketOutlined /> : <UserOutlined />} /><div className={`flex flex-col gap-1 ${m.role === 'user' ? 'items-end' : 'items-start'}`}>{m.role === 'coach' && <span className="text-[10px] font-black text-blue-500 px-2 bg-blue-50 rounded-lg">{m.agent}</span>}<div className={`message-bubble ${m.role === 'user' ? 'user-bubble' : 'bot-bubble'}`}>{m.role === 'coach' ? <ReactMarkdown>{m.text}</ReactMarkdown> : <p className="m-0 font-medium">{m.text}</p>}</div></div></div></div>))}{isSending && <div className="text-[10px] text-slate-400 animate-pulse ml-12">导师正在深度解析中...</div>}<div ref={messagesEndRef} /></div></div>
-              <div className="p-8 h-[140px] flex items-center"><div className="max-w-3xl mx-auto w-full relative"><div className="bg-gray-50 border border-gray-100 rounded-3xl overflow-hidden focus-within:shadow-xl transition-all"><textarea value={inputValue} onChange={e => setInputValue(e.target.value)} onKeyDown={handleKeyDown} className="w-full bg-transparent border-none p-5 outline-none resize-none text-sm" placeholder="输入想法..." rows={1} /><div className="absolute right-4 bottom-4"><Button onClick={handleSend} disabled={isSending || !inputValue.trim()} type="primary" shape="circle" icon={<SendOutlined />} /></div></div></div></div>
+              <div className="flex-1 overflow-y-auto px-8 py-10 custom-scrollbar">
+                <div className="max-w-3xl mx-auto space-y-10">
+                  {chatLog.map((m, i) => (
+                    <div key={i} className={`flex w-full ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`flex gap-4 max-w-[90%] ${m.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+                        <Avatar className="shadow-sm" style={{ backgroundColor: m.role === 'coach' ? '#2563eb' : '#f4f4f5' }} icon={m.role === 'coach' ? <RocketOutlined /> : <UserOutlined />} />
+                        <div className="flex flex-col gap-1">
+                          {m.role === 'coach' && <span className="text-[10px] font-black text-blue-500 px-2 bg-blue-50 rounded-lg">{m.agent}</span>}
+                          <div className={`message-bubble ${m.role === 'user' ? 'user-bubble' : 'bot-bubble'}`}>
+                            {m.role === 'coach' ? <ReactMarkdown>{m.text}</ReactMarkdown> : <p className="m-0 font-medium">{m.text}</p>}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {isSending && <div className="text-[10px] text-slate-400 animate-pulse ml-12">导师正在深度解析中...</div>}
+                  <div ref={messagesEndRef} />
+                </div>
+              </div>
+              <div className="p-8 h-[140px] flex items-center">
+                <div className="max-w-3xl mx-auto w-full relative">
+                  <div className="bg-gray-50 border border-gray-100 rounded-3xl overflow-hidden focus-within:shadow-xl transition-all">
+                    <textarea value={inputValue} onChange={e => setInputValue(e.target.value)} onKeyDown={handleKeyDown} className="w-full bg-transparent border-none p-5 outline-none resize-none text-sm" placeholder="输入想法..." rows={1} />
+                    <div className="absolute right-4 bottom-4"><Button onClick={handleSend} disabled={isSending || !inputValue.trim()} type="primary" shape="circle" icon={<SendOutlined />} /></div>
+                  </div>
+                </div>
+              </div>
             </>
           ) : activePage === 'editor' ? (
             <div className="flex-1 flex flex-col bg-[#fcfcfd] overflow-y-auto custom-scrollbar">
               <header className="h-20 border-b border-gray-100 px-8 flex items-center justify-between bg-white sticky top-0 z-10 shrink-0">
                 <div className="flex flex-col"><h2 className="text-[14px] font-black text-indigo-500 uppercase tracking-[0.2em] m-0">Venture Editor</h2><span className="text-[9px] text-slate-300 font-bold uppercase">{activeProjectId ? 'Project Editing' : 'Draft Preparation'}</span></div>
-                <div className="flex gap-3">
-                  <Button type="primary" shape="round" className="h-10 px-10 font-black bg-indigo-600 border-none shadow-lg shadow-indigo-200">导出预览</Button>
-                </div>
+                <div className="flex gap-3"><Button type="primary" shape="round" className="h-10 px-10 font-black bg-indigo-600 border-none shadow-lg shadow-indigo-200">导出预览</Button></div>
               </header>
               <div className="flex-1 p-10">
                 {(activeProjectId || editorContent) ? (
                   <div className="max-w-5xl mx-auto space-y-8 animate-slide-up">
-                    <div className="grid grid-cols-2 gap-8">
+                    <div className="grid grid-cols-3 gap-8">
                       <div onClick={() => setShowLogModal(true)} className="group p-8 rounded-[40px] bg-white border-2 border-transparent hover:border-purple-200 shadow-xl shadow-slate-200/30 transition-all cursor-pointer flex items-center gap-6">
-                        <div className="w-16 h-16 rounded-[24px] bg-purple-50 text-purple-500 flex items-center justify-center text-3xl shadow-sm group-hover:scale-110 transition-transform"><CommitIcon /></div>
-                        <div className="flex flex-col gap-1"><span className="text-[16px] font-black text-slate-800">项目日志/进度</span><span className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">Commit History & Logs</span></div>
+                        <div className="w-16 h-16 rounded-[24px] bg-purple-50 text-purple-500 flex items-center justify-center text-2xl shadow-sm group-hover:scale-110 transition-transform"><CommitIcon /></div>
+                        <div className="flex flex-col gap-1"><span className="text-[14px] font-black text-slate-800">项目日志</span><span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">History</span></div>
                       </div>
                       <div onClick={handleRequestReview} className="group p-8 rounded-[40px] bg-white border-2 border-transparent hover:border-amber-200 shadow-xl shadow-slate-200/30 transition-all cursor-pointer flex items-center gap-6">
-                        <div className="w-16 h-16 rounded-[24px] bg-amber-50 text-amber-500 flex items-center justify-center text-3xl shadow-sm group-hover:scale-110 transition-transform"><BulbOutlined /></div>
-                        <div className="flex flex-col gap-1"><span className="text-[16px] font-black text-slate-800">灵感深度启发</span><span className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">AI Brainstorming Analysis</span></div>
+                        <div className="w-16 h-16 rounded-[24px] bg-amber-50 text-amber-500 flex items-center justify-center text-2xl shadow-sm group-hover:scale-110 transition-transform"><BulbOutlined /></div>
+                        <div className="flex flex-col gap-1"><span className="text-[14px] font-black text-slate-800">深度诊断</span><span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Analysis</span></div>
+                      </div>
+                      <div onClick={() => { handleRequestReview(); }} className="group p-8 rounded-[40px] bg-gradient-to-br from-indigo-600 to-blue-700 border-2 border-transparent shadow-xl shadow-blue-200/30 transition-all cursor-pointer flex items-center gap-6">
+                        <div className="w-16 h-16 rounded-[24px] bg-white/20 text-white flex items-center justify-center text-2xl shadow-sm group-hover:scale-110 transition-transform"><StarOutlined /></div>
+                        <div className="flex flex-col gap-1"><span className="text-[14px] font-black text-white">AI 评估建议</span><span className="text-[9px] text-white/60 font-bold uppercase tracking-widest">AI Suggestions</span></div>
                       </div>
                     </div>
-
                     <div className="min-h-[700px] editor-surface relative overflow-hidden flex flex-col">
                       <div className="absolute top-0 left-0 w-2 h-full bg-indigo-500/10 z-0"></div>
                       <div className="flex-1 p-12 z-10 flex flex-col">
                         {editorContent ? (
                           <div className="prose prose-slate max-w-none flex-1 flex flex-col">
-                            <div className="flex justify-between items-center mb-6">
-                              <h1 className="text-2xl font-black m-0 text-slate-800 flex items-center gap-3"><FileTextOutlined className="text-indigo-600" /> 项目计划书正文</h1>
-                              <div className="flex items-center gap-2">
-                                {isSaving && <span className="text-[10px] text-indigo-400 font-black animate-pulse uppercase">Cloud Saving...</span>}
-                                <Button onClick={() => saveContent(editorContent)} icon={<CloudUploadOutlined />} shape="round" type="text" className="text-[11px] font-black text-slate-400">手动保存</Button>
+                            {/* 工具栏与多文件标签 */}
+                            <div className="flex flex-col gap-2 mb-4">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <span className="text-xl font-bold text-gray-800">项目计划书正文</span>
+                                  <div className="flex items-center gap-2 overflow-x-auto py-1 max-w-[500px] no-scrollbar">
+                                    <div
+                                      onClick={() => handleFileTabChange(null)}
+                                      className={`px-3 py-1 rounded-md text-xs cursor-pointer border transition-all flex items-center gap-1 shrink-0 ${activeFileId === null ? 'bg-blue-50 border-blue-200 text-blue-700 shadow-sm' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                                    >
+                                      <FileTextOutlined /> 主稿
+                                    </div>
+                                    {projectFiles.map(file => (
+                                      <div
+                                        key={file.id}
+                                        onClick={() => handleFileTabChange(file.id)}
+                                        className={`px-3 py-1 rounded-md text-xs cursor-pointer border transition-all flex items-center gap-1 shrink-0 ${activeFileId === file.id ? 'bg-blue-50 border-blue-200 text-blue-700 shadow-sm' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                                      >
+                                        {file.file_type === 'pdf' ? <FilePdfOutlined className="text-red-500" /> : <FileWordOutlined className="text-blue-500" />}
+                                        <span className="max-w-[80px] truncate">{file.filename}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {isSaving && <span className="text-[10px] text-indigo-400 font-black animate-pulse uppercase">Cloud Saving...</span>}
+                                  <Button
+                                    icon={<BulbOutlined />}
+                                    className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-none hover:opacity-90 font-bold"
+                                    onClick={handleRequestReview}
+                                    loading={reviewLoading}
+                                  >
+                                    AI 智库诊断
+                                  </Button>
+                                  <Button icon={<CloudUploadOutlined />} onClick={() => setShowImportModal(true)}>导入文档</Button>
+                                </div>
                               </div>
                             </div>
-                            <textarea
-                              className="w-full flex-1 bg-slate-50 p-8 rounded-3xl border border-dashed border-slate-200 text-sm leading-relaxed text-slate-600 font-medium resize-none outline-none focus:border-indigo-300 transition-all custom-scrollbar min-h-[500px]"
-                              value={editorContent} onChange={e => setEditorContent(e.target.value)} placeholder="在此编辑您的项目计划书..."
-                            />
+                            <textarea className="w-full flex-1 bg-slate-50 p-8 rounded-3xl border border-dashed border-slate-200 text-sm leading-relaxed text-slate-600 font-medium resize-none outline-none focus:border-indigo-300 transition-all custom-scrollbar min-h-[500px]" value={editorContent} onChange={e => setEditorContent(e.target.value)} placeholder="在此编辑您的项目计划书..." />
                           </div>
                         ) : (
                           <div className="h-full flex flex-col items-center justify-center py-24 text-center space-y-8">
                             <div className="w-24 h-24 bg-slate-50 rounded-[35%] flex items-center justify-center text-slate-200 text-5xl animate-pulse shadow-inner"><FileTextOutlined /></div>
-                            <div className="space-y-3"><h3 className="text-2xl font-black text-slate-800 tracking-tight">Venture Editor - 创作空间</h3><p className="max-w-md text-sm font-bold text-slate-400 leading-relaxed mx-auto">请在左侧选择对应项目，或直接导入 PDF/DOCX 文件。我们将为您保留每个项目的专属创作状态。</p></div>
+                            <div className="space-y-3"><h3 className="text-2xl font-black text-slate-800 tracking-tight">Venture Editor - 创作空间</h3><p className="max-w-md text-sm font-bold text-slate-400 leading-relaxed mx-auto">请在左侧选择对应项目，或直接导入 PDF/DOCX 文件。</p></div>
                             <Button onClick={() => fileInputRef.current?.click()} size="large" shape="round" className="h-14 px-10 font-black border-2 border-indigo-100 text-indigo-600 bg-white hover:shadow-xl transition-all">快速导入解析</Button>
                           </div>
                         )}
                       </div>
                     </div>
                   </div>
-                ) : <div className="h-full flex flex-col items-center justify-center opacity-30 gap-6 py-20 px-20">
-                  <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center text-4xl text-slate-300"><RocketOutlined /></div>
-                  <p className="font-black text-slate-400 uppercase tracking-widest text-[11px]">Select or Create a Project to Start</p>
-                </div>}
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center opacity-30 gap-6 py-20 px-20">
+                    <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center text-4xl text-slate-300"><RocketOutlined /></div>
+                    <p className="font-black text-slate-400 uppercase tracking-widest text-[11px]">Select or Create a Project to Start</p>
+                  </div>
+                )}
               </div>
             </div>
-          ) : <div className="flex-1 flex items-center justify-center font-black text-slate-300 text-2xl animate-pulse">协作功能模块正在拼命开发中...</div>}
+          ) : activePage === 'collab' ? (
+            <div className="flex-1 flex flex-col bg-[#fcfcfd] overflow-y-auto custom-scrollbar p-10">
+              <div className="max-w-5xl mx-auto w-full space-y-10">
+                <div className="flex items-center justify-between"><h2 className="text-2xl font-black text-slate-800 m-0 flex items-center gap-3"><TeamOutlined className="text-blue-600" /> 协作中心 <span className="text-xs font-bold text-slate-400 uppercase tracking-widest pl-2 border-l border-slate-200">Team Collaboration</span></h2></div>
+
+                <div className="grid grid-cols-3 gap-6">
+                  <div className="col-span-2 bg-white rounded-[40px] p-8 border border-slate-100 shadow-xl shadow-slate-200/20 space-y-6">
+                    <h3 className="text-sm font-black text-slate-700 uppercase tracking-widest flex items-center gap-2 mb-4"><GlobalOutlined className="text-blue-500" /> 团队核心名片墙</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      {(syncData.members || []).filter(m => !activeProjectId || m.project_id === activeProjectId).map((member, idx) => (
+                        <div key={idx} className={`flex items-center gap-4 p-5 rounded-[32px] border transition-all ${member.role === 'Advisor' ? 'bg-slate-900 border-slate-950 text-white shadow-lg' : 'bg-slate-50 border-slate-100 hover:border-blue-200 hover:bg-white'}`}>
+                          <Avatar size={50} src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${member.name}`} className="shadow-sm" />
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-[13px] font-black truncate mb-0.5 ${member.role === 'Advisor' ? 'text-white' : 'text-slate-800'}`}>{member.name}</p>
+                            <span className={`px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-widest ${member.role === 'Leader' ? 'bg-amber-100 text-amber-700' : member.role === 'Advisor' ? 'bg-slate-800 text-slate-300' : 'bg-white text-slate-400'}`}>{member.role === 'Leader' ? '项目总负责人' : member.role === 'Advisor' ? '指导教师' : '执行成员'}</span>
+                          </div>
+                        </div>
+                      ))}
+                      {(syncData.members || []).filter(m => !activeProjectId || m.project_id === activeProjectId).length === 0 && <div className="col-span-2 py-10 text-center text-slate-300 font-bold uppercase tracking-widest text-xs">暂无团队成员数据</div>}
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-[40px] p-8 border border-slate-100 shadow-xl shadow-slate-200/20 flex flex-col gap-6 text-center justify-center border-l-4 border-l-blue-500">
+                    <div className="text-4xl font-black text-blue-600">{Math.round(((syncData.deadlines || []).filter(d => d.status === 'completed').length || 0) / ((syncData.deadlines || []).length || 1) * 100)}%</div>
+                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-loose">当前项目整体进度周期<br />Milestone Completion Ratio</div>
+                    <Progress percent={Math.round(((syncData.deadlines || []).filter(d => d.status === 'completed').length || 0) / ((syncData.deadlines || []).length || 1) * 100)} showInfo={false} strokeColor="#2563eb" trailColor="#f1f5f9" strokeWidth={12} className="mt-2" />
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-[40px] p-10 border border-slate-100 shadow-xl shadow-slate-200/20">
+                  <h3 className="text-sm font-black text-slate-700 uppercase tracking-widest flex items-center gap-2 mb-8"><CalendarOutlined className="text-emerald-500" /> 项目里程碑演进 (Synced History)</h3>
+                  <Timeline className="collab-timeline antique-timeline">
+                    {(syncData.deadlines || []).filter(d => !activeProjectId || d.project_name === (syncData.projects || []).find(p => p.id === activeProjectId)?.name).map((d, i) => (
+                      <Timeline.Item key={i} color={d.status === 'completed' ? 'green' : 'blue'} dot={d.status === 'completed' ? <CheckCircleOutlined className="text-lg" /> : <ClockCircleOutlined className="text-lg" />}>
+                        <div className="flex flex-col gap-1 ml-4 py-2">
+                          <div className="flex justify-between items-center"><span className="text-[14px] font-black text-slate-800">{d.title}</span><span className="text-[11px] font-black text-slate-400 bg-slate-50 px-3 py-1 rounded-full">{d.due_date}</span></div>
+                          <p className="text-[11px] text-slate-400 font-medium m-0">于 {d.due_date} 之前需达成该阶段性业务目标。</p>
+                        </div>
+                      </Timeline.Item>
+                    ))}
+                  </Timeline>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex-1 flex items-center justify-center font-black text-slate-300 text-2xl animate-pulse">未知页面状态</div>
+          )}
         </section>
 
         {/* Console Column - Context Aware */}
@@ -566,11 +804,11 @@ const StudentWorkspace = () => {
               </div>
               <div className="console-card animate-slide-in" style={{ animationDelay: '0.1s' }}>
                 <h3 className="text-[12px] font-black text-slate-700 uppercase mb-5 tracking-widest flex items-center gap-2"><GlobalOutlined className="text-emerald-500" /> 指导导师寄语</h3>
-                {activeProjectId && syncData.projects.find(p => p.id === activeProjectId) ? (
+                {activeProjectId && (syncData.projects || []).find(p => p.id === activeProjectId) ? (
                   <div className="p-6 bg-gradient-to-br from-emerald-50/50 to-white rounded-[32px] border border-emerald-100 flex flex-col gap-2 shadow-sm">
-                    <p className="text-[18px] font-black text-slate-800 mb-0">{syncData.projects.find(p => p.id === activeProjectId)?.advisor_name}</p>
+                    <p className="text-[18px] font-black text-slate-800 mb-0">{(syncData.projects || []).find(p => p.id === activeProjectId)?.advisor_name}</p>
                     <p className="text-[10px] text-emerald-600 font-black mb-3 uppercase tracking-[0.2em] bg-emerald-100/30 w-fit px-2 rounded-lg">Official Mentor</p>
-                    <p className="text-[11px] text-slate-500 font-medium leading-relaxed italic border-l-2 border-emerald-200 pl-3">"{syncData.projects.find(p => p.id === activeProjectId)?.advisor_info}"</p>
+                    <p className="text-[11px] text-slate-500 font-medium leading-relaxed italic border-l-2 border-emerald-200 pl-3">"{(syncData.projects || []).find(p => p.id === activeProjectId)?.advisor_info}"</p>
                   </div>
                 ) : (<div className="py-12 border-2 border-dashed border-slate-100 rounded-[32px] text-center"><span className="text-slate-200 font-black text-[10px] uppercase tracking-[0.3em]">Pending Advisor</span></div>)}
               </div>

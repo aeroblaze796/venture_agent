@@ -14,6 +14,7 @@ import {
 // ========================
 // MOCK DATA
 // ========================
+/*
 const warningProjectsData = [
   {
     key: '1',
@@ -40,6 +41,7 @@ const warningProjectsData = [
     aiConclusion: '未提及市面上已有的同类垄断产品。',
   },
 ];
+*/
 
 const rubricScores = [
   { code: 'R1', name: '痛点真实性', score: '2.5 / 5', status: 'warning' },

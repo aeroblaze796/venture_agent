@@ -1,7 +1,11 @@
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 import pypdf
 import docx
+import os
+import shutil
+import uuid
 from pydantic import BaseModel
 from app.auth import auth_router
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,6 +27,9 @@ app.add_middleware(
 )
 
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
+
+os.makedirs("uploads", exist_ok=True)
+app.mount("/api/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 from typing import Optional, List
 
@@ -233,9 +240,18 @@ def create_project_endpoint(project: ProjectCreateRequest):
     return {"status": "ok", "project_id": project_id}
 
 @app.post("/api/projects/import")
-async def import_project_file(file: UploadFile = File(...)):
+async def import_project_file(file: UploadFile = File(...), project_id: Optional[int] = Form(None)):
     content = ""
     filename = file.filename
+    unique_filename = f"{uuid.uuid4().hex}_{filename}"
+    upload_path = os.path.join("uploads", unique_filename)
+    
+    with open(upload_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+        
+    file.file.seek(0)
+    
+    file_url = f"http://localhost:8000/api/uploads/{unique_filename}"
     try:
         if filename.endswith(".pdf"):
             pdf_reader = pypdf.PdfReader(file.file)
@@ -253,7 +269,44 @@ async def import_project_file(file: UploadFile = File(...)):
     except Exception as e:
         return {"error": f"Failed to parse file: {str(e)}"}
     
-    return {"text": content, "filename": filename}
+    if project_id is not None:
+        import sqlite3
+        from app.database import DB_PATH
+        conn = sqlite3.connect(DB_PATH)
+        cur = conn.cursor()
+        cur.execute("INSERT INTO project_files (project_id, filename, file_url) VALUES (?, ?, ?)",
+                    (project_id, filename, file_url))
+        conn.commit()
+        conn.close()
+        
+    return {"text": content, "filename": filename, "file_url": file_url}
+
+@app.delete("/api/project-files/{file_id}")
+def delete_project_file(file_id: int):
+    import sqlite3
+    from app.database import DB_PATH
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM project_files WHERE id = ?", (file_id,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        return {"error": "File not found"}
+    
+    file_url = row["file_url"]
+    try:
+        filename_part = file_url.split("/api/uploads/")[-1]
+        physical_path = os.path.join("uploads", filename_part)
+        if os.path.exists(physical_path):
+            os.remove(physical_path)
+    except Exception:
+        pass
+    
+    cursor.execute("DELETE FROM project_files WHERE id = ?", (file_id,))
+    conn.commit()
+    conn.close()
+    return {"status": "deleted"}
 
 class CommitRequest(BaseModel):
     content: str
@@ -271,27 +324,54 @@ def create_commit(project_id: int, request: CommitRequest):
     conn.close()
     return {"status": "ok"}
 
+class ReviewRequest(BaseModel):
+    rubric: str = "internet_plus"
+
+
 @app.post("/api/projects/{project_id}/review")
-def review_project(project_id: int):
-    # 此处未来可接入真正的 AI 评审逻辑
-    review_text = """【VentureAgent AI 深度评审报告】
+def review_project(project_id: int, request: ReviewRequest):
+    from app.database import DB_PATH
+    import sqlite3
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT name, content FROM projects WHERE id = ?", (project_id,))
+    row = cursor.fetchone()
+    conn.close()
+    
+    if not row:
+        return {"review": "项目未找到或正文为空。"}
+    
+    project_name, project_content = row
+    if not project_content or len(project_content.strip()) < 10:
+        return {"review": "项目正文内容太少，AI 无法进行深度评估。请先在编辑器中补充内容。"}
 
-## 一、 核心价值评估 (Score: 88/100)
-- **创新性 (优)**: 项目利用真菌菌丝体替代传统塑料，具有极强的环保属性和市场差异化。
-- **商业模式 (良)**: 闭环逻辑清晰，但初期 B 端客户的获取成本 (CAC) 需进一步调研。
-
-## 二、 赛道对齐建议
-- **互联网+ 赛道**: 建议强化“科技成果转化”背景，突出实验室专利授权。
-- **挑战杯 赛道**: 需增加更多的社会价值调研数据（如碳中和贡献度）。
-
-## 三、 团队背景画像
-- 成员涵盖算法、生物材料与市场策划，结构合理。建议增加一名财务背景成员负责投融资模型。
-
-## 四、 综合改进指导
-1. **风险控制**: 细化真菌培养过程中对温湿度的敏感性控制方案。
-2. **市场推广**: 建议从高端化妆品外包装切入，利用长尾效应建立品牌认知。
-"""
-    return {"review": review_text}
+    try:
+        from app.agent.graph import get_llm
+        llm = get_llm()
+        
+        rubric_name = "互联网+ (中国国际大学生创新大赛)" if request.rubric == "internet_plus" else "挑战杯 (全国大学生课外学术科技作品竞赛)"
+        
+        system_prompt = f"""你是一个资深的创业项目评审专家，正在为参加“{rubric_name}”的学生提供深度点评。
+        请针对以下项目计划书正文进行多维度的客观评价，并给出改进建议。
+        要求：
+        1. 语言专业、犀利且富有启发性。
+        2. 使用 Markdown 格式输出。
+        3. 必须包含：## 一、核心价值评估（带评分）、## 二、赛道对齐建议、## 三、风险与改进提示。
+        4. 输出内容应真实、具体，不要只说空话。
+        5. 在报告最后，换行后强制附带以下文案：
+        ---
+        ⚠️ **免责标识**：以上内容由 Venture Agent AI 自动生成，仅供启发与参考，不代表官方赛事评审结果或录取承诺。
+        """
+        user_prompt = f"项目名称：{project_name}\n\n项目正文：\n{project_content}"
+        
+        response = llm.invoke([
+            ("system", system_prompt),
+            ("human", user_prompt)
+        ])
+        return {"review": response.content}
+    except Exception as e:
+        print(f"AI Review Error: {e}")
+        return {"review": f"AI 评审服务暂时不可用 ({str(e)})。请确保后台 .env 中已配置 DEEPSEEK_API_KEY。"}
 
 class UpdateContentRequest(BaseModel):
     content: str
@@ -337,4 +417,4 @@ def delete_project_endpoint(project_id: int):
 if __name__ == "__main__":
     import uvicorn
     # 确保从 backend 根目录启动时能正确加载模块
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8001, reload=True)
