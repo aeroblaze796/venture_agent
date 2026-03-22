@@ -240,7 +240,7 @@ const AdminMatrix = () => {
           )}
 
           {activeTab === 'graph' && (
-            <div className="h-[calc(100vh-160px)] animate-in fade-in slide-in-from-bottom-5 duration-500 rounded-[40px] overflow-hidden border border-indigo-100 shadow-2xl relative">
+            <div className="h-[calc(100vh-160px)] animate-in fade-in slide-in-from-bottom-5 duration-500 rounded-[40px] overflow-hidden border border-indigo-100 shadow-2xl relative flex flex-col">
               <div className="bg-slate-900 px-8 py-4 flex items-center justify-between border-b border-white/5">
                 <div className="flex items-center gap-3">
                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
@@ -248,15 +248,30 @@ const AdminMatrix = () => {
                    <Tag color="purple" className="border-none text-[8px] px-2 leading-tight">LIVE SOURCE</Tag>
                 </div>
                 <div className="flex items-center gap-4">
-                  <span className="text-[9px] text-white/40 font-bold italic">Default: neo4j / neo4j (or your manual password)</span>
-                  <Button size="small" ghost className="text-[9px] border-white/20 text-white/60 hover:text-white" onClick={() => window.open('http://localhost:7474', '_blank')}>全屏独立窗口</Button>
+                  <span className="text-[9px] text-white/40 font-bold italic mr-4">Default: neo4j / neo4j (or your manual password)</span>
+                  <Button type="primary" size="small" className="bg-purple-600 border-none text-[10px] font-black px-6" onClick={() => window.open('http://localhost:7474', '_blank')}>在新标签页中安全打开</Button>
                 </div>
               </div>
-              <iframe 
-                src="http://localhost:7474" 
-                className="w-full h-full border-none bg-white" 
-                title="Neo4j Browser"
-              />
+              <div className="flex-1 bg-white relative">
+                 {/* 提示底层：当 iframe 被浏览器安全策略（如 Firefox X-Frame-Options）拦截时可见 */}
+                 <div className="absolute inset-0 flex flex-col items-center justify-center p-20 text-center space-y-6">
+                    <div className="w-24 h-24 bg-slate-50 rounded-[35%] flex items-center justify-center text-5xl text-slate-200 animate-pulse shadow-inner"><NodeIndexOutlined /></div>
+                    <div className="space-y-3">
+                       <h3 className="text-xl font-black text-slate-800 tracking-tight">正在尝试加载嵌入式图谱...</h3>
+                       <p className="max-w-md text-sm font-bold text-slate-400 leading-relaxed mx-auto">
+                         由于浏览器安全策略（X-Frame-Options），某些环境可能禁止在网页内嵌套显示数据库管理端。
+                         <br/><br/>
+                         如果您看到的是空白页或“拒绝连接”，请点击上方 <span className="text-purple-600 font-black">紫色按钮</span> 在独立窗口中打开，或尝试使用 Chrome / Edge 浏览器。
+                       </p>
+                    </div>
+                 </div>
+                 {/* 真正的 iframe 层 */}
+                 <iframe 
+                    src="http://localhost:7474" 
+                    className="w-full h-full border-none bg-transparent relative z-10" 
+                    title="Neo4j Browser"
+                 />
+              </div>
             </div>
           )}
 
