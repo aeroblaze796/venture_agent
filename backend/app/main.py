@@ -152,18 +152,37 @@ def on_startup():
     init_db()
     migrate_db()
     
-    # 注入 Mock 教师用户到账户库 (方便用户直接登录测试)
+    # 注入 Mock 教师用户到账户库 (同步更新 username 与 real_name)
     from app.ingestion.db_config import db
     try:
-        # 使用 MERGE 确认 Mock 教师属性对齐：username 为工号，real_name 为真实姓名
+        # T001 对应 张老师
         db.execute_query("MERGE (u:User {username: 'T001'}) SET u.password = '123456', u.role = 'teacher', u.real_name = '张老师', u.college = '智慧双创学院'")
+        # T002 对应 王老师
         db.execute_query("MERGE (u:User {username: 'T002'}) SET u.password = '123456', u.role = 'teacher', u.real_name = '王老师', u.college = '经管学院'")
         
+        # 为了兼容用户可能的输入习惯，也确保 '张老师' 这个 username 有 real_name 自指
+        db.execute_query("MERGE (u:User {username: '张老师'}) SET u.password = '123456', u.role = 'teacher', u.real_name = '张老师', u.college = '智慧双创学院'")
+
         # 注入 Mock 管理员用户
         db.execute_query("MERGE (u:User {username: 'admin'}) SET u.password = 'admin123', u.role = 'admin', u.real_name = '超级管理员', u.college = '校级管理中心'")
         db.execute_query("MERGE (u:User {username: '001'}) SET u.password = '123456', u.role = 'admin', u.real_name = '管理员001', u.college = '系统维护部'")
     except Exception as e:
         print(f"Mock Teacher Injection failed (Neo4j possibly down): {e}")
+
+    # --- SQLite 数据对齐逻辑：将 advisor_name 映射回已知的 advisor_id ---
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        # 兼容性回填：同时支持 T001 和直接使用姓名作为 ID 的情况
+        cursor.execute("UPDATE projects SET advisor_id = 'T001' WHERE advisor_name = '张老师'")
+        cursor.execute("UPDATE projects SET advisor_id = '张老师' WHERE advisor_name = '张老师'") 
+        cursor.execute("UPDATE projects SET advisor_id = 'T002' WHERE advisor_name = '王老师'")
+        cursor.execute("UPDATE projects SET advisor_id = '王老师' WHERE advisor_name = '王老师'")
+        conn.commit()
+        conn.close()
+        print("DEBUG: SQLite advisor_id comprehensive backfill completed.")
+    except Exception as e:
+        print(f"SQLite backfill failed: {e}")
 
 @app.get("/")
 def read_root():

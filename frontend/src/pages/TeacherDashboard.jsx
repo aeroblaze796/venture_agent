@@ -72,7 +72,13 @@ const RadarChart = ({ data }) => {
 export default function TeacherDashboard() {
   const navigate = useNavigate();
   const [activeMenu, setActiveMenu] = useState('overview'); // 'overview' 或 项目ID
-  const [teacherName, setTeacherName] = useState(localStorage.getItem('va_realname'));
+  const [teacherName, setTeacherName] = useState(() => {
+    const name = localStorage.getItem('va_realname');
+    const id = localStorage.getItem('va_username');
+    if (name && name !== 'null' && name !== 'undefined') return name;
+    if (id && id !== 'null' && id !== 'undefined') return id;
+    return 'Unknown Instructor';
+  });
   const [teacherId, setTeacherId] = useState(localStorage.getItem('va_username'));
   const [loading, setLoading] = useState(false);
   

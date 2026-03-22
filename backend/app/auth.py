@@ -75,7 +75,7 @@ def login(user: UserAuth):
         "message": "登录成功", 
         "token": user_data["username"], 
         "username": user_data["username"],
-        "real_name": user_data.get("real_name"),
+        "real_name": user_data.get("real_name") or user_data["username"],
         "role": user_data.get("role"),
         "college": user_data.get("college"),
         "teacher_id": user_data["username"] if user_data.get("role") == 'teacher' else None
