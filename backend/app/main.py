@@ -281,6 +281,55 @@ async def import_project_file(file: UploadFile = File(...), project_id: Optional
         
     return {"text": content, "filename": filename, "file_url": file_url}
 
+@app.get("/api/projects/{project_id}/files")
+def get_project_files(project_id: int):
+    import sqlite3
+    from app.database import DB_PATH
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, filename, file_url FROM project_files WHERE project_id = ?", (project_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+@app.get("/api/projects/{project_id}/files/{file_id}")
+async def get_project_file_content(project_id: int, file_id: int):
+    import sqlite3
+    from app.database import DB_PATH
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, filename, file_url FROM project_files WHERE id = ? AND project_id = ?", (file_id, project_id))
+    row = cursor.fetchone()
+    conn.close()
+    if not row:
+        return {"error": "File not found"}
+    
+    file_url = row["file_url"]
+    filename = row["filename"]
+    # 尝试从物理文件读取文本内容 (复用解析逻辑)
+    content = ""
+    try:
+        filename_part = file_url.split("/api/uploads/")[-1]
+        physical_path = os.path.join("uploads", filename_part)
+        if filename.endswith(".pdf"):
+            with open(physical_path, "rb") as f:
+                pdf_reader = pypdf.PdfReader(f)
+                for page in pdf_reader.pages:
+                    text = page.extract_text()
+                    if text: content += text + "\n"
+        elif filename.endswith(".docx"):
+            doc = docx.Document(physical_path)
+            for para in doc.paragraphs:
+                content += para.text + "\n"
+        else:
+            content = "Non-previewable file type."
+    except Exception as e:
+        content = f"Error reading file: {str(e)}"
+        
+    return {"id": file_id, "filename": filename, "content": content}
+
 @app.delete("/api/project-files/{file_id}")
 def delete_project_file(file_id: int):
     import sqlite3
@@ -417,4 +466,4 @@ def delete_project_endpoint(project_id: int):
 if __name__ == "__main__":
     import uvicorn
     # 确保从 backend 根目录启动时能正确加载模块
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8001, reload=True)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)

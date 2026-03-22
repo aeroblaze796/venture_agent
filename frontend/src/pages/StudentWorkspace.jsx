@@ -90,6 +90,7 @@ const StudentWorkspace = () => {
   const [editorContent, setEditorContent] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef(null);
+  const prevProjectIdRef = useRef(null);
 
   const [showLogModal, setShowLogModal] = useState(false);
   const [showReviewModal, setShowReviewModal] = useState(false);
@@ -130,12 +131,12 @@ const StudentWorkspace = () => {
   const fetchDashboardData = async () => {
     const username = localStorage.getItem("va_username") || "1120230571";
     try {
-      const res = await fetch(`http://localhost:8001/api/sync/dashboard?user_id=${username}`);
+      const res = await fetch(`http://localhost:8000/api/sync/dashboard?user_id=${username}`);
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
       if (data && data.projects) {
         setSyncData(data);
-        if (activeProjectId) {
+        if (activeProjectId && !activeFileId) {
           const curProj = (data.projects || []).find(p => p.id === activeProjectId);
           if (curProj) setEditorContent(curProj.content || "");
         }
@@ -150,7 +151,7 @@ const StudentWorkspace = () => {
       const username = localStorage.getItem("va_username") || "1120230571";
       try {
         await fetchDashboardData();
-        const res = await fetch(`http://localhost:8001/api/conversations?user_id=${username}`);
+        const res = await fetch(`http://localhost:8000/api/conversations?user_id=${username}`);
         if (res.ok) {
           const convs = await res.json();
           if (Array.isArray(convs) && convs.length > 0) {
@@ -167,15 +168,24 @@ const StudentWorkspace = () => {
 
   useEffect(() => {
     if (activeProjectId) {
+      const isProjectChanged = prevProjectIdRef.current !== activeProjectId;
       const proj = (syncData.projects || []).find(p => p.id === activeProjectId);
-      if (proj) {
-        setEditorContent(proj.content || "");
+      
+      if (isProjectChanged) {
+        // 仅在切换项目时重置
+        if (proj) setEditorContent(proj.content || "");
         setActiveFileId(null);
         setActiveFileUrl(null);
         fetchProjectFiles(activeProjectId);
+        prevProjectIdRef.current = activeProjectId;
+      } else if (!activeFileId) {
+        // 同一项目内刷新，且未在预览文件时，更新编辑器内容
+        if (proj) setEditorContent(proj.content || "");
       }
+    } else {
+      prevProjectIdRef.current = null;
     }
-  }, [activeProjectId, syncData.projects]);
+  }, [activeProjectId, syncData.projects, activeFileId]);
 
   useEffect(() => {
     let interval;
@@ -190,9 +200,18 @@ const StudentWorkspace = () => {
     return () => clearInterval(interval);
   }, [isPitching, pitchTime]);
 
+  // --- 自动保存逻辑 ---
+  useEffect(() => {
+    if (!activeProjectId || !editorContent) return;
+    const timer = setTimeout(() => {
+      saveContent(editorContent);
+    }, 2000); // 2秒防抖
+    return () => clearTimeout(timer);
+  }, [editorContent, activeProjectId]);
+
   const fetchProjectFiles = async (id) => {
     try {
-      const res = await fetch(`http://localhost:8001/api/projects/${id}/files`);
+      const res = await fetch(`http://localhost:8000/api/projects/${id}/files`);
       if (res.ok) {
         const files = await res.json();
         setProjectFiles(files);
@@ -207,7 +226,7 @@ const StudentWorkspace = () => {
       setActiveFileId(null);
     } else {
       try {
-        const res = await fetch(`http://localhost:8001/api/projects/${activeProjectId}/files/${fileId}`);
+        const res = await fetch(`http://localhost:8000/api/projects/${activeProjectId}/files/${fileId}`);
         if (res.ok) {
           const data = await res.json();
           setEditorContent(data.content);
@@ -222,7 +241,7 @@ const StudentWorkspace = () => {
     const newId = `va_session_${username}_${Date.now()}`;
     const greeting = '你好！我是你的项目助手。今天有什么新灵感或者进展想聊聊吗？';
     try {
-      await fetch("http://localhost:8001/api/conversations", {
+      await fetch("http://localhost:8000/api/conversations", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: newId, user_id: username, title: '新灵感会话', greeting })
       });
@@ -236,7 +255,7 @@ const StudentWorkspace = () => {
     if (!id) return;
     setActiveSessionId(id);
     try {
-      const res = await fetch(`http://localhost:8001/api/conversations/${id}/messages`);
+      const res = await fetch(`http://localhost:8000/api/conversations/${id}/messages`);
       if (res.ok) {
         const msgs = await res.json();
         setChatLog(Array.isArray(msgs) ? msgs : []);
@@ -250,7 +269,7 @@ const StudentWorkspace = () => {
   const handleRenameSession = async () => {
     if (!editSessionTitle.trim() || !editingSessionId) return;
     try {
-      await fetch(`http://localhost:8001/api/conversations/${editingSessionId}`, {
+      await fetch(`http://localhost:8000/api/conversations/${editingSessionId}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: editSessionTitle })
       });
@@ -262,7 +281,7 @@ const StudentWorkspace = () => {
 
   const handleDeleteSession = async (id) => {
     try {
-      await fetch(`http://localhost:8001/api/conversations/${id}`, { method: 'DELETE' });
+      await fetch(`http://localhost:8000/api/conversations/${id}`, { method: 'DELETE' });
       setHistory(prev => prev.filter(s => s.id !== id));
       if (activeSessionId === id) { setChatLog([]); setActiveSessionId(null); }
       message.success("会话已删除。");
@@ -271,7 +290,7 @@ const StudentWorkspace = () => {
 
   const handleDeleteFile = async (fileId, fileUrl) => {
     try {
-      await fetch(`http://localhost:8001/api/project-files/${fileId}`, { method: 'DELETE' });
+      await fetch(`http://localhost:8000/api/project-files/${fileId}`, { method: 'DELETE' });
       if (activeFileUrl === fileUrl) setActiveFileUrl(null);
       await fetchDashboardData();
       message.success('附件已删除');
@@ -302,7 +321,7 @@ const StudentWorkspace = () => {
     if (!activeProjectId) return;
     setIsSaving(true);
     try {
-      const res = await fetch(`http://localhost:8001/api/projects/${activeProjectId}/content`, {
+      const res = await fetch(`http://localhost:8000/api/projects/${activeProjectId}/content`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content })
       });
@@ -324,7 +343,7 @@ const StudentWorkspace = () => {
     if (activeProjectId) formData.append("project_id", activeProjectId);
     const hide = message.loading('解析中...', 0);
     try {
-      const res = await fetch("http://localhost:8001/api/projects/import", { method: "POST", body: formData });
+      const res = await fetch("http://localhost:8000/api/projects/import", { method: "POST", body: formData });
       if (!res.ok) throw new Error("Upload failed");
       const data = await res.json();
       hide();
@@ -384,7 +403,7 @@ const StudentWorkspace = () => {
 
     setIsSaving(true);
     try {
-      const resp = await fetch('http://localhost:8001/api/projects', {
+      const resp = await fetch('http://localhost:8000/api/projects', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...projectForm, content: editorContent, owner_id: localStorage.getItem('va_username') || '1120230571' })
       });
@@ -408,7 +427,7 @@ const StudentWorkspace = () => {
   const handleRenameProject = async () => {
     if (!editProjectTitle.trim() || !editingProjectId) return;
     try {
-      const res = await fetch(`http://localhost:8001/api/projects/${editingProjectId}`, {
+      const res = await fetch(`http://localhost:8000/api/projects/${editingProjectId}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: editProjectTitle })
       });
@@ -427,7 +446,7 @@ const StudentWorkspace = () => {
 
   const handleDeleteProject = async (id) => {
     try {
-      const res = await fetch(`http://localhost:8001/api/projects/${id}`, { method: 'DELETE' });
+      const res = await fetch(`http://localhost:8000/api/projects/${id}`, { method: 'DELETE' });
       if (res.ok) {
         if (activeProjectId === id) { setActiveProjectId(null); setEditorContent(""); }
         await fetchDashboardData();
@@ -461,7 +480,7 @@ const StudentWorkspace = () => {
   const handleAddLog = async () => {
     if (!newLogContent.trim() || !activeProjectId) return;
     try {
-      const res = await fetch(`http://localhost:8001/api/projects/${activeProjectId}/commits`, {
+      const res = await fetch(`http://localhost:8000/api/projects/${activeProjectId}/commits`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: newLogContent, author: localStorage.getItem('va_username') || 'Student' })
       });
@@ -484,7 +503,7 @@ const StudentWorkspace = () => {
     setShowReviewModal(true);
     try {
       const rubricValue = selectedRubric === "互联网+" ? "internet_plus" : "challenge_cup";
-      const res = await fetch(`http://localhost:8001/api/projects/${activeProjectId}/review`, { 
+      const res = await fetch(`http://localhost:8000/api/projects/${activeProjectId}/review`, { 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rubric: rubricValue })
@@ -653,7 +672,17 @@ const StudentWorkspace = () => {
             <div className="flex-1 flex flex-col bg-[#fcfcfd] overflow-y-auto custom-scrollbar">
               <header className="h-20 border-b border-gray-100 px-8 flex items-center justify-between bg-white sticky top-0 z-10 shrink-0">
                 <div className="flex flex-col"><h2 className="text-[14px] font-black text-indigo-500 uppercase tracking-[0.2em] m-0">Venture Editor</h2><span className="text-[9px] text-slate-300 font-bold uppercase">{activeProjectId ? 'Project Editing' : 'Draft Preparation'}</span></div>
-                <div className="flex gap-3"><Button type="primary" shape="round" className="h-10 px-10 font-black bg-indigo-600 border-none shadow-lg shadow-indigo-200">导出预览</Button></div>
+                <div className="flex gap-3">
+                  <Button 
+                    onClick={() => saveContent(editorContent)} 
+                    loading={isSaving}
+                    type="primary" 
+                    shape="round" 
+                    className="h-10 px-10 font-black bg-indigo-600 border-none shadow-lg shadow-indigo-200"
+                  >
+                    保存项目
+                  </Button>
+                </div>
               </header>
               <div className="flex-1 p-10">
                 {(activeProjectId || editorContent) ? (
@@ -698,13 +727,16 @@ const StudentWorkspace = () => {
                                 {projectFiles.length > 0 ? projectFiles.map(file => (
                                   <div
                                     key={file.id}
-                                    onClick={() => { setActiveFileId(file.id); setActiveFileUrl(file.file_url); }}
-                                    className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all cursor-pointer whitespace-nowrap shrink-0 max-w-[160px] ${activeFileId === file.id ? 'bg-indigo-50 border-indigo-200 shadow-sm' : 'bg-white border-slate-200 hover:border-indigo-300 hover:bg-slate-50'}`}
+                                    onClick={() => { 
+                                      setActiveFileUrl(file.file_url); 
+                                      handleFileTabChange(file.id); 
+                                    }}
+                                    className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all cursor-pointer whitespace-nowrap shrink-0 max-w-[160px] ${activeFileId === file.id ? 'bg-indigo-600 border-indigo-700 shadow-md scale-105' : 'bg-white border-slate-200 hover:border-indigo-300 hover:bg-slate-50'}`}
                                   >
-                                    {file.file_type === 'pdf' ? <FilePdfOutlined className={activeFileId === file.id ? 'text-rose-500' : 'text-slate-400'} /> : <FileWordOutlined className={activeFileId === file.id ? 'text-blue-500' : 'text-slate-400'} />}
+                                    {file.file_type === 'pdf' || file.filename.toLowerCase().endsWith('.pdf') ? <FilePdfOutlined className={activeFileId === file.id ? 'text-white' : 'text-rose-500'} /> : <FileWordOutlined className={activeFileId === file.id ? 'text-white' : 'text-blue-500'} />}
                                     <Tooltip title={file.filename}><span className={`text-[11px] font-black truncate w-full ${activeFileId === file.id ? 'text-white' : 'text-slate-600'}`}>{file.filename}</span></Tooltip>
                                     <Popconfirm title="确定删除该附件？" onConfirm={(e) => { e.stopPropagation(); handleDeleteFile(file.id, file.file_url); }} okText="删除" cancelText="取消">
-                                      <CloseOutlined onClick={e => e.stopPropagation()} className="text-[9px] text-slate-300 hover:text-rose-500 ml-1 font-bold" />
+                                      <CloseOutlined onClick={e => e.stopPropagation()} className={`text-[9px] ml-1 font-bold ${activeFileId === file.id ? 'text-indigo-200 hover:text-white' : 'text-slate-300 hover:text-rose-500'}`} />
                                     </Popconfirm>
                                   </div>
                                 )) : <span className="text-[11px] text-slate-400 font-bold italic w-full text-center">系统检测到暂无关联原始附件</span>}
@@ -720,13 +752,27 @@ const StudentWorkspace = () => {
                                   <textarea className="w-full flex-1 bg-slate-50/50 p-8 text-sm leading-relaxed text-slate-600 font-medium resize-none outline-none focus:bg-white focus:border-indigo-300 transition-all custom-scrollbar" value={editorContent} onChange={e => setEditorContent(e.target.value)} placeholder="所选文档的内容草稿将在此显示，您可以手动合并或润色..." />
                                 </div>
                                 
-                                {/* 右栏：原文件参照预览 (当有选中且为 PDF 时) */}
-                                {activeFileUrl && activeFileUrl.toLowerCase().endsWith('.pdf') && (
+                                {/* 右栏：原文件参照预览 (PDF/Docx) */}
+                                {activeFileUrl && (
                                   <div className="flex-1 flex flex-col rounded-3xl overflow-hidden border border-slate-200 shadow-inner bg-slate-100 flex-none w-1/2 animate-slide-in">
-                                    <div className="h-10 bg-slate-50 border-b border-slate-200 flex items-center px-4 shrink-0 shadow-sm z-10">
-                                      <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-rose-500"></div><span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">PDF Source Reference (Read-only)</span></div>
+                                    <div className="h-10 bg-slate-50 border-b border-slate-200 flex items-center px-4 shrink-0 shadow-sm z-10 justify-between">
+                                      <div className="flex items-center gap-2">
+                                        <div className={`w-2.5 h-2.5 rounded-full ${activeFileUrl.toLowerCase().endsWith('.pdf') ? 'bg-rose-500' : 'bg-blue-500'}`}></div>
+                                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                                          {activeFileUrl.toLowerCase().endsWith('.pdf') ? 'PDF Source Reference (Read-only)' : 'Docx Content Preview'}
+                                        </span>
+                                      </div>
+                                      <a href={activeFileUrl.startsWith('http') ? activeFileUrl : `http://localhost:8000${activeFileUrl}`} download className="text-[9px] font-black text-indigo-500 hover:text-indigo-700">下载原件</a>
                                     </div>
-                                    <iframe src={activeFileUrl.startsWith('http') ? activeFileUrl.replace('8000', '8001') : `http://localhost:8001${activeFileUrl}`} className="w-full flex-1 border-none" title="PDF Preview" />
+                                    {activeFileUrl.toLowerCase().endsWith('.pdf') ? (
+                                      <iframe src={activeFileUrl.startsWith('http') ? activeFileUrl : `http://localhost:8000${activeFileUrl}`} className="w-full flex-1 border-none" title="PDF Preview" />
+                                    ) : (
+                                      <div className="w-full flex-1 bg-white p-10 overflow-y-auto custom-scrollbar shadow-inner">
+                                        <div className="max-w-2xl mx-auto py-8 text-slate-700 leading-relaxed font-serif whitespace-pre-wrap">
+                                          {editorContent || "正在尝试加载高清预览内容..."}
+                                        </div>
+                                      </div>
+                                    )}
                                   </div>
                                 )}
                               </div>
