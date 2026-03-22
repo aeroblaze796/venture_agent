@@ -11,6 +11,7 @@ import datetime
 import asyncio
 from typing import Optional, List
 from pydantic import BaseModel
+print(f"DEBUG: main.py loaded from {os.path.abspath(__file__)}")
 
 # 导入本地模块
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "uploads")
@@ -695,11 +696,30 @@ def admin_dashboard():
 
 @app.get("/api/admin/users")
 def admin_get_users():
-    """获取 Neo4j 所有用户节点 (用于可视化)"""
+    """获取 Neo4j 所有实名用户及其学院角色 (管理员视角)"""
     try:
         query = "MATCH (u:User) RETURN u.username as username, u.real_name as real_name, u.role as role, u.college as college"
         result = db.execute_query(query)
-        return result
+        # 显式构造字典列表，解决 JSON 序列化丢失键名导致前端渲染空白的问题
+        user_list = []
+        for r in result:
+            user_list.append({
+                "username": r["username"],
+                "real_name": r["real_name"],
+                "role": r["role"],
+                "college": r["college"]
+            })
+        return user_list
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/admin/identities")
+def admin_get_identities():
+    """全新的调试接口，确保返回标准的字典列表 (JSON Objects)"""
+    try:
+        query = "MATCH (u:User) RETURN u.username as username, u.real_name as real_name, u.role as role, u.college as college"
+        result = db.execute_query(query)
+        return [record.data() for record in result]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

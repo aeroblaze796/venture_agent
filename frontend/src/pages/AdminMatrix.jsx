@@ -47,9 +47,27 @@ const AdminMatrix = () => {
 
   const fetchUsers = async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/admin/users');
-      if (res.ok) setUsers(await res.json());
-    } catch (e) { console.error(e); }
+      const res = await fetch('http://localhost:8000/api/admin/identities'); // 尝试新接口
+      if (!res.ok) {
+        // 退而求其次使用原接口 (具备数组容错逻辑)
+        const res2 = await fetch('http://localhost:8000/api/admin/users');
+        if (res2.ok) {
+           const data = await res2.json();
+           const normalized = data.map(item => {
+             // 重点修复逻辑：如果后端返回的是 [val, val, ...] 列表，则手动映射
+             if (Array.isArray(item)) {
+               return { username: item[0], real_name: item[1] || '---', role: item[2] || 'student', college: item[3] || '未录入' };
+             }
+             return item;
+           });
+           setUsers(normalized);
+        }
+      } else {
+        setUsers(await res.json());
+      }
+    } catch (e) {
+      console.error("Fetch users failed:", e);
+    }
   };
 
   const handleLogout = () => {
@@ -69,11 +87,17 @@ const AdminMatrix = () => {
   const userColumns = [
     { title: '账号 (ID)', dataIndex: 'username', key: 'username', render: (text) => <span className="font-mono font-bold text-indigo-600">{text}</span> },
     { title: '姓名', dataIndex: 'real_name', key: 'real_name' },
-    { title: '角色', dataIndex: 'role', key: 'role', render: (role) => (
-      <Tag color={role === 'admin' ? 'magenta' : role === 'teacher' ? 'cyan' : 'blue'}>
-        {role?.toUpperCase()}
-      </Tag>
-    )},
+    { 
+      title: '角色标识', 
+      dataIndex: 'role', 
+      key: 'role',
+      render: (role) => {
+        const r = String(role).toLowerCase();
+        if (r === 'teacher') return <Tag color="blue" className="rounded-full px-4 border-none font-bold">教师</Tag>;
+        if (r === 'admin') return <Tag color="purple" className="rounded-full px-4 border-none font-bold">管理员</Tag>;
+        return <Tag color="green" className="rounded-full px-4 border-none font-bold">学生</Tag>;
+      }
+    },
     { title: '所属组织', dataIndex: 'college', key: 'college' },
   ];
 
@@ -94,8 +118,7 @@ const AdminMatrix = () => {
           items={[
             { key: 'dashboard', icon: <DashboardOutlined />, label: '全域大盘概览' },
             { key: 'projects', icon: <ProjectOutlined />, label: '全量项目监控' },
-            { key: 'users', icon: <TeamOutlined />, label: 'Neo4j 用户库' },
-            { key: 'graph', icon: <NodeIndexOutlined />, label: '图谱实验室 (Neo4j)' },
+            { key: 'users', icon: <TeamOutlined />, label: 'Neo4j 身份图谱' },
             { key: 'sqlite', icon: <DatabaseOutlined />, label: 'SQLite 状态机' },
           ]}
         />
@@ -203,75 +226,46 @@ const AdminMatrix = () => {
           )}
 
           {activeTab === 'users' && (
-            <div className="animate-in fade-in slide-in-from-bottom-5 duration-500">
+            <div className="animate-in fade-in duration-500">
                <Row gutter={24}>
-                  <Col span={16}>
-                    <Card className="rounded-[40px] border-none shadow-2xl shadow-indigo-500/10 p-6">
-                      <h3 className="text-sm font-black text-slate-700 uppercase tracking-widest mb-8 px-4 flex items-center gap-2"><TeamOutlined className="text-indigo-500" /> Neo4j 实名用户库</h3>
-                      <Table dataSource={users} columns={userColumns} rowKey="username" className="lofty-table" pagination={{ pageSize: 10 }} />
+                  <Col span={10}>
+                    <Card className="rounded-[40px] border-none shadow-2xl shadow-indigo-500/10 p-6 h-[calc(100vh-160px)] flex flex-col">
+                      <h3 className="text-sm font-black text-slate-700 uppercase tracking-widest mb-8 px-4 flex items-center gap-2"><TeamOutlined className="text-indigo-500" /> 用户实名名录</h3>
+                      <div className="flex-1 overflow-auto">
+                        <Table dataSource={users} columns={userColumns} rowKey="username" className="lofty-table" pagination={{ pageSize: 12, size: 'small' }} size="small" />
+                      </div>
                     </Card>
                   </Col>
-                  <Col span={8}>
-                     <Card className="rounded-[40px] bg-slate-900 text-white p-10 h-full overflow-hidden relative">
-                        <div className="absolute -top-10 -right-10 w-64 h-64 bg-indigo-500/20 blur-[80px] rounded-full"></div>
-                        <h3 className="text-xs font-black text-indigo-400 uppercase tracking-widest mb-10 flex items-center gap-2"><NodeIndexOutlined /> 图数据库可视化映射</h3>
-                        <div className="space-y-10">
-                           <div className="p-6 bg-white/5 rounded-3xl border border-white/10 hover:bg-white/10 transition-all cursor-default">
-                              <p className="text-[10px] font-black text-indigo-300 uppercase mb-2">User 节点分布</p>
-                              <div className="flex items-end justify-between">
-                                 <span className="text-4xl font-black">{users.length}</span>
-                                 <span className="text-[10px] text-white/40 font-bold mb-1">Nodes (Labeled: :User)</span>
-                              </div>
-                           </div>
-                           <Divider className="border-white/5 my-0" />
-                           <div className="p-6 bg-white/5 rounded-3xl border border-white/10 opacity-40">
-                              <p className="text-[10px] font-black text-indigo-300 uppercase mb-2">Relationship 拓扑关系</p>
-                              <div className="flex items-end justify-between">
-                                 <span className="text-4xl font-black">---</span>
-                                 <span className="text-[10px] text-white/40 font-bold mb-1">Edges (Type: :WORKS_ON)</span>
-                              </div>
-                           </div>
-                           <p className="text-[10px] text-white/30 italic mt-10">可视化图谱渲染引擎加载中，当前展示基础元数据统计。</p>
+                  <Col span={14}>
+                     <div className="h-[calc(100vh-160px)] rounded-[40px] overflow-hidden border border-indigo-100 shadow-2xl relative flex flex-col bg-slate-900 text-white">
+                        <div className="px-8 py-4 flex items-center justify-between border-b border-white/5">
+                            <div className="flex items-center gap-3">
+                               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                               <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest leading-none">Neo4j Explorer Matrix</span>
+                            </div>
+                            <div className="flex items-center gap-4">
+                              <span className="text-[9px] text-white/40 font-bold italic mr-4">Default: neo4j/neo4j</span>
+                              <Button type="primary" size="small" className="bg-purple-600 border-none text-[9px] font-black" onClick={() => window.open('http://localhost:7474', '_blank')}>独立窗口</Button>
+                            </div>
                         </div>
-                     </Card>
+                        <div className="flex-1 bg-white relative">
+                             {/* 提示底层 */}
+                             <div className="absolute inset-0 flex flex-col items-center justify-center p-10 text-center space-y-4">
+                                <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center text-3xl text-slate-200 animate-pulse"><NodeIndexOutlined /></div>
+                                <div className="space-y-1">
+                                   <h3 className="text-sm font-black text-slate-700">正在尝试加载图谱...</h3>
+                                   <p className="text-[10px] text-slate-400 max-w-xs mx-auto">若提示连接被拒绝，请点击上方按钮在独立窗口中开启实验室。项项项?</p>
+                                </div>
+                             </div>
+                             <iframe 
+                                src="http://localhost:7474" 
+                                className="w-full h-full border-none bg-transparent relative z-10" 
+                                title="Neo4j Browser"
+                             />
+                        </div>
+                     </div>
                   </Col>
                </Row>
-            </div>
-          )}
-
-          {activeTab === 'graph' && (
-            <div className="h-[calc(100vh-160px)] animate-in fade-in slide-in-from-bottom-5 duration-500 rounded-[40px] overflow-hidden border border-indigo-100 shadow-2xl relative flex flex-col">
-              <div className="bg-slate-900 px-8 py-4 flex items-center justify-between border-b border-white/5">
-                <div className="flex items-center gap-3">
-                   <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                   <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest leading-none">Neo4j Native Browser Matrix</span>
-                   <Tag color="purple" className="border-none text-[8px] px-2 leading-tight">LIVE SOURCE</Tag>
-                </div>
-                <div className="flex items-center gap-4">
-                  <span className="text-[9px] text-white/40 font-bold italic mr-4">Default: neo4j / neo4j (or your manual password)</span>
-                  <Button type="primary" size="small" className="bg-purple-600 border-none text-[10px] font-black px-6" onClick={() => window.open('http://localhost:7474', '_blank')}>在新标签页中安全打开</Button>
-                </div>
-              </div>
-              <div className="flex-1 bg-white relative">
-                 {/* 提示底层：当 iframe 被浏览器安全策略（如 Firefox X-Frame-Options）拦截时可见 */}
-                 <div className="absolute inset-0 flex flex-col items-center justify-center p-20 text-center space-y-6">
-                    <div className="w-24 h-24 bg-slate-50 rounded-[35%] flex items-center justify-center text-5xl text-slate-200 animate-pulse shadow-inner"><NodeIndexOutlined /></div>
-                    <div className="space-y-3">
-                       <h3 className="text-xl font-black text-slate-800 tracking-tight">正在尝试加载嵌入式图谱...</h3>
-                       <p className="max-w-md text-sm font-bold text-slate-400 leading-relaxed mx-auto">
-                         由于浏览器安全策略（X-Frame-Options），某些环境可能禁止在网页内嵌套显示数据库管理端。
-                         <br/><br/>
-                         如果您看到的是空白页或“拒绝连接”，请点击上方 <span className="text-purple-600 font-black">紫色按钮</span> 在独立窗口中打开，或尝试使用 Chrome / Edge 浏览器。
-                       </p>
-                    </div>
-                 </div>
-                 {/* 真正的 iframe 层 */}
-                 <iframe 
-                    src="http://localhost:7474" 
-                    className="w-full h-full border-none bg-transparent relative z-10" 
-                    title="Neo4j Browser"
-                 />
-              </div>
             </div>
           )}
 
