@@ -19,7 +19,8 @@ import {
   LineChartOutlined,
   ProjectOutlined,
   UserOutlined,
-  BookOutlined
+  BookOutlined,
+  SyncOutlined
 } from '@ant-design/icons';
 
 const { TabPane } = Tabs;
@@ -265,7 +266,13 @@ export default function TeacherDashboard() {
               </>
             )}
           </h2>
-          <div className="flex gap-4">
+          <div className="flex gap-4 items-center">
+             <Button 
+               type="text" 
+               icon={<SyncOutlined spin={loading} />} 
+               onClick={fetchDashboardData}
+               title="同步最新数据"
+             />
              {activeMenu !== 'overview' && (
                <>
                  <Button loading={auditLoading} type="primary" onClick={triggerAudit} icon={<RobotOutlined />} className="bg-indigo-600 border-none">

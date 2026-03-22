@@ -36,7 +36,8 @@ import {
   FileWordOutlined,
   DashboardOutlined,
   FolderOpenOutlined,
-  FileSearchOutlined
+  FileSearchOutlined,
+  SyncOutlined
 } from "@ant-design/icons";
 import "./VentureDashboard.css";
 
@@ -122,6 +123,7 @@ const StudentWorkspace = () => {
 
   const [editingProjectId, setEditingProjectId] = useState(null);
   const [editProjectTitle, setEditProjectTitle] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const radarData = [
     { label: '创新性', value: 85 }, { label: '落地性', value: 70 }, { label: '技术力', value: 90 },
@@ -138,6 +140,7 @@ const StudentWorkspace = () => {
   };
 
   const fetchDashboardData = async () => {
+    setLoading(true);
     const username = localStorage.getItem("va_username") || "1120230571";
     try {
       const res = await fetch(`http://localhost:8000/api/sync/dashboard?user_id=${username}`);
@@ -152,6 +155,8 @@ const StudentWorkspace = () => {
       }
     } catch (e) {
       console.error("fetchDashboardData failed:", e);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -660,9 +665,17 @@ const StudentWorkspace = () => {
         <section className="flex-1 flex flex-col bg-white overflow-hidden relative">
           <header className="h-16 border-b border-[#f1f3f5] px-8 flex items-center justify-between bg-white/80 backdrop-blur-md z-10 shrink-0">
             <div className="flex flex-col"><span className="text-[10px] font-black text-blue-500 tracking-widest uppercase">{activePage === 'chat' ? 'Venture Agent AI' : 'Venture Dashboard'}</span><span className="text-xs font-bold text-slate-400">{activePage === 'chat' ? '灵感辅导中' : '项目管控中'}</span></div>
-            <Popover content={notificationContent} title={<span className="font-black text-sm">通知中心</span>} trigger="click" placement="bottomRight">
-              <Badge count={2} size="small" offset={[-2, 6]}><Button type="text" icon={<BellOutlined className="text-slate-400 text-lg" />} /></Badge>
-            </Popover>
+            <div className="flex gap-4 items-center">
+              <Button 
+                type="text" 
+                icon={<SyncOutlined className={loading ? 'animate-spin' : ''} />} 
+                onClick={fetchDashboardData}
+                title="同步最新数据"
+              />
+              <Popover content={notificationContent} title={<span className="font-black text-sm">通知中心</span>} trigger="click" placement="bottomRight">
+                <Badge count={2} size="small" offset={[-2, 6]}><Button type="text" icon={<BellOutlined className="text-slate-400 text-lg" />} /></Badge>
+              </Popover>
+            </div>
           </header>
 
           {activePage === 'chat' ? (
