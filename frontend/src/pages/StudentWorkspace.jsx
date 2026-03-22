@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import dayjs from "dayjs";
 import ReactMarkdown from "react-markdown";
 import { Calendar, Timeline, Badge, Tooltip, Avatar, ConfigProvider, Modal, Button, Select, Popover, List, Steps, message, Input, Space, Divider, Empty, Popconfirm, Progress } from "antd";
@@ -71,6 +72,7 @@ const RadarChart = ({ data, size = 180 }) => {
 };
 
 const StudentWorkspace = () => {
+  const navigate = useNavigate();
   const [inputValue, setInputValue] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [activePage, setActivePage] = useState("chat");
@@ -98,6 +100,11 @@ const StudentWorkspace = () => {
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [reviewResult, setReviewResult] = useState("");
   const [reviewLoading, setReviewLoading] = useState(false);
+
+  const handleLogout = () => {
+    localStorage.clear();
+    navigate('/');
+  };
   
   // Custom modals state
   const [showRubricModal, setShowRubricModal] = useState(false);
@@ -698,6 +705,16 @@ const StudentWorkspace = () => {
                 </div>
               ))
             )}
+          </div>
+
+          {/* 退出按钮 - 与管理员端 UI 对齐 */}
+          <div className="p-4 border-t border-slate-100 m-4 text-center mt-auto">
+             <div 
+                onClick={handleLogout}
+                className="w-full py-3 rounded-2xl text-slate-400 hover:text-rose-500 hover:bg-slate-50 cursor-pointer transition-all flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest"
+             >
+                <LogoutOutlined /> 安全退出系统
+             </div>
           </div>
         </aside>
 

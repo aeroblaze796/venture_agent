@@ -250,15 +250,20 @@ export default function TeacherDashboard() {
           )) : <div className="p-4 text-center text-slate-600 text-xs text-italic">暂无待辅导项目</div>}
         </nav>
 
-        <div className="p-4 bg-slate-900/50 mt-auto">
+        <div className="p-4 border-t border-white/5 m-4 text-center mt-auto">
           <div className="flex items-center gap-3 mb-4 cursor-pointer hover:bg-slate-800 p-2 rounded-lg" onClick={() => setShowProfileModal(true)}>
             <Avatar size="large" src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${teacherName}`} border="2px solid #10b981" />
-            <div className="overflow-hidden">
+            <div className="overflow-hidden text-left">
               <p className="text-sm font-bold truncate text-white">{teacherName}</p>
               <p className="text-[10px] text-slate-500">指导教师</p>
             </div>
           </div>
-          <Button block type="text" icon={<LogoutOutlined />} onClick={handleLogout} className="text-slate-500 hover:text-rose-400">退出系统</Button>
+          <div 
+            onClick={handleLogout}
+            className="w-full py-3 rounded-2xl text-slate-500 hover:text-rose-400 hover:bg-white/5 cursor-pointer transition-all flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest"
+          >
+            <LogoutOutlined /> 安全退出系统
+          </div>
         </div>
       </aside>
 
