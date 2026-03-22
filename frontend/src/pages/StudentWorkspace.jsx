@@ -229,7 +229,7 @@ const StudentWorkspace = () => {
 
   // --- 自动保存逻辑 ---
   useEffect(() => {
-    if (!activeProjectId || !editorContent) return;
+    if (!activeProjectId) return; // 允许在内容被清空时同步到后端
     const timer = setTimeout(() => {
       saveContent(editorContent);
     }, 2000); // 2秒防抖
@@ -319,23 +319,43 @@ const StudentWorkspace = () => {
     try {
       await fetch(`http://localhost:8000/api/project-files/${fileId}`, { method: 'DELETE' });
       const wasActive = activeFileId === fileId;
-      if (wasActive) {
-        setActiveFileId(null);
-        setActiveFileUrl(null);
-      } else if (activeFileUrl === fileUrl) {
-        setActiveFileUrl(null);
-      }
-      // 先拉取最新文件列表，再刷大盘同步内容
-      if (activeProjectId) await fetchProjectFiles(activeProjectId);
-      await fetchDashboardData();
       
-      if (wasActive) {
-        const proj = (syncData.projects || []).find(p => p.id === activeProjectId);
-        setEditorContent(proj?.content || "");
+      // 1. 立即获取最新的文件列表并更新状态
+      let newFiles = [];
+      if (activeProjectId) {
+        const res = await fetch(`http://localhost:8000/api/projects/${activeProjectId}/files`);
+        if (res.ok) {
+          newFiles = await res.json();
+          setProjectFiles(newFiles);
+        }
       }
+
+      // 2. 核心跳转逻辑：满足用户对“多文件切换”及“单文件回空白”的需求
+      if (wasActive) {
+        if (newFiles.length > 0) {
+          // 如果还有其他文件，自动切换到列表中的第一个
+          const nextFile = newFiles[0];
+          setActiveFileUrl(nextFile.file_url); // 同步更新预览器
+          await handleFileTabChange(nextFile.id); // 同步更新编辑器内容
+        } else {
+          // 如果删除了最后一个文件，彻底回归空白初始化状态
+          setActiveFileId(null);
+          setActiveFileUrl(null);
+          setEditorContent("");
+          // 增加：显式清理后端项目正文，防止 fetchDashboardData 后续同步时重新拉回旧文档
+          if (activeProjectId) await saveContent("");
+        }
+      } else {
+        // 如果删除的不是当前看的文件，仅需检查 URL 冲突并同步数据
+        if (activeFileUrl === fileUrl) setActiveFileUrl(null);
+      }
+
       await fetchDashboardData();
       message.success('附件已删除');
-    } catch (_e) { message.error('删除失败'); }
+    } catch (_e) {
+      console.error(_e);
+      message.error('删除失败');
+    }
   };
 
   const handleSend = async () => {

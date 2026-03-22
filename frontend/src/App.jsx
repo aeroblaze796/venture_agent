@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import StudentWorkspace from './pages/StudentWorkspace';
 import TeacherDashboard from './pages/TeacherDashboard';
+import AdminMatrix from './pages/AdminMatrix';
 import './index.css';
 
 function Portal() {
@@ -67,7 +68,7 @@ function Portal() {
           localStorage.setItem('va_teacher_id', data.teacher_id);
         }
         
-        const actualPath = finalRole === 'teacher' ? '/teacher' : '/student';
+        const actualPath = finalRole === 'admin' ? '/admin' : (finalRole === 'teacher' ? '/teacher' : '/student');
         navigate(actualPath);
       } else {
         setErrorMsg(data.detail || '登录失败，请检查学号/工号或密码');
@@ -98,7 +99,7 @@ function Portal() {
     setErrorMsg('');
     try {
       const payload = {
-        role: targetRole === '/teacher' ? 'teacher' : 'student',
+        role: targetRole === '/admin' ? 'admin' : (targetRole === '/teacher' ? 'teacher' : 'student'),
         real_name: realName,
         id_num: idNum,
         password: regPassword,
@@ -126,7 +127,7 @@ function Portal() {
         
         setShowLoginModal(false);
         setShowOnboarding(false);
-        navigate(finalRole === 'teacher' ? '/teacher' : '/student');
+        navigate(finalRole === 'admin' ? '/admin' : (finalRole === 'teacher' ? '/teacher' : '/student'));
       } else {
         setErrorMsg(data.detail || '注册失败，请稍后重试');
       }
@@ -203,27 +204,26 @@ function Portal() {
             </div>
           </div>
 
-          {/* 旧版本联调 */}
-          <a 
-            href="http://localhost:3000" 
-            target="_blank" 
-            rel="noreferrer" 
-            className="group relative bg-slate-50/30 border border-dashed border-gray-200 p-12 rounded-[3.5rem] hover:bg-white hover:border-solid hover:shadow-[0_40px_80px_-15px_rgba(0,0,0,0.08)] hover:-translate-y-1 transition-all duration-500 flex flex-col items-center text-center no-underline overflow-hidden"
+          {/* 管理员卡片 - 替换原有旧版入口 */}
+          <div 
+            onClick={() => handleCardClick('/admin')} 
+            className="group relative bg-white border border-gray-100 p-12 rounded-[3.5rem] shadow-sm hover:shadow-[0_40px_80px_-15px_rgba(0,0,0,0.08)] hover:-translate-y-2 transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] flex flex-col items-center text-center cursor-pointer overflow-hidden"
           >
-            <div className="absolute inset-0 bg-gradient-to-br from-orange-50/0 to-orange-50/30 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+            <div className="absolute inset-0 bg-gradient-to-br from-purple-50/0 to-purple-50/50 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
             <div className="relative z-10">
-              <div className="w-20 h-20 rounded-3xl bg-white border border-gray-100 flex items-center justify-center mb-8 group-hover:rotate-12 transition-transform duration-500 shadow-sm">
-                <span className="material-symbols-outlined text-4xl text-slate-300 group-hover:text-orange-400">history</span>
+              <div className="w-20 h-20 rounded-3xl bg-purple-50/50 flex items-center justify-center mb-8 group-hover:scale-110 group-hover:rotate-6 transition-transform duration-500">
+                <span className="text-5xl">🛡️</span>
               </div>
-              <h3 className="text-2xl font-bold text-slate-700 mb-4 tracking-tight italic opacity-80 group-hover:opacity-100">Legacy UI</h3>
-              <p className="text-slate-400 text-xs leading-relaxed mb-10 px-4">
-                跳转至 `old-version` 路径下的原始界面，用于最早期逻辑追溯。
+              <h3 className="text-3xl font-bold text-slate-900 mb-4 tracking-tight group-hover:text-purple-600 transition-colors">系统管理 Admin</h3>
+              <p className="text-slate-400 text-sm leading-relaxed mb-10 px-4 group-hover:text-slate-500 transition-colors">
+                最高权限管理矩阵。监控全站数据流，统筹跨院系项目的孵化态势。
               </p>
-              <div className="mt-auto inline-flex py-2.5 px-6 rounded-full border border-gray-200 text-slate-400 text-xs font-medium group-hover:border-orange-200 group-hover:bg-orange-50 group-hover:text-orange-500 transition-all flex items-center gap-2">
-                访问旧版基地 <span className="material-symbols-outlined text-[14px]">output</span>
+              <div className="mt-auto inline-flex py-3 px-8 rounded-full bg-slate-50 text-slate-500 text-sm font-semibold group-hover:bg-purple-600 group-hover:text-white group-hover:shadow-lg group-hover:shadow-purple-200 transition-all duration-300 transform group-hover:translate-x-1">
+                特权进入
+                <span className="ml-2 opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all duration-300">→</span>
               </div>
             </div>
-          </a>
+          </div>
 
         </div>
       </div>
@@ -242,8 +242,8 @@ function Portal() {
             {!showOnboarding ? (
               <>
                 <div className="text-center mb-10">
-                  <div className={`w-14 h-14 rounded-2xl mx-auto flex items-center justify-center mb-6 shadow-sm ${targetRole === '/student' ? 'bg-blue-50 text-blue-600' : 'bg-emerald-50 text-emerald-600'}`}>
-                    <span className="text-3xl">{targetRole === '/student' ? '🎓' : '👨‍🏫'}</span>
+                  <div className={`w-14 h-14 rounded-2xl mx-auto flex items-center justify-center mb-6 shadow-sm ${targetRole === '/student' ? 'bg-blue-50 text-blue-600' : targetRole === '/teacher' ? 'bg-emerald-50 text-emerald-600' : 'bg-purple-50 text-purple-600'}`}>
+                    <span className="text-3xl">{targetRole === '/student' ? '🎓' : targetRole === '/teacher' ? '👨‍🏫' : '🛡️'}</span>
                   </div>
                   <h2 className="text-3xl font-black text-slate-900 mb-2">
                     {modalType === 'login' ? '欢迎回来' : '开启新征程'}
@@ -299,7 +299,7 @@ function Portal() {
                   <button 
                     type="submit"
                     disabled={isLoading}
-                    className={`w-full py-4 mt-4 rounded-2xl font-bold text-white transition-all shadow-lg active:scale-95 ${isLoading ? 'bg-slate-400 cursor-not-allowed' : (targetRole === '/student' ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-200' : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200')}`}
+                    className={`w-full py-4 mt-4 rounded-2xl font-bold text-white transition-all shadow-lg active:scale-95 ${isLoading ? 'bg-slate-400 cursor-not-allowed' : (targetRole === '/student' ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-200' : targetRole === '/teacher' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200' : 'bg-purple-600 hover:bg-purple-700 shadow-purple-200')}`}
                   >
                     {isLoading ? '验证中...' : (modalType === 'login' ? '登 录' : '注 册')}
                   </button>
@@ -473,11 +473,15 @@ function RoleGuard({ children, requiredRole }) {
   if (!username) return <Navigate to="/" replace />;
   
   // 角色严控：路径与角色必须精准匹配
+  if (requiredRole === 'admin' && role !== 'admin') {
+    return <Navigate to="/" replace />;
+  }
   if (requiredRole === 'teacher' && role !== 'teacher') {
     return <Navigate to="/student" replace />;
   }
-  if (requiredRole === 'student' && role === 'teacher') {
-    return <Navigate to="/teacher" replace />;
+  if (requiredRole === 'student' && (role === 'teacher' || role === 'admin')) {
+    const defaultPath = role === 'teacher' ? '/teacher' : '/admin';
+    return <Navigate to={defaultPath} replace />;
   }
   
   return children;
@@ -501,6 +505,14 @@ function App() {
           element={
             <RoleGuard requiredRole="teacher">
               <TeacherDashboard />
+            </RoleGuard>
+          } 
+        />
+        <Route 
+          path="/admin" 
+          element={
+            <RoleGuard requiredRole="admin">
+              <AdminMatrix />
             </RoleGuard>
           } 
         />

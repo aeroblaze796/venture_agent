@@ -157,6 +157,10 @@ def on_startup():
         # 使用 MERGE 确认 Mock 教师属性对齐：username 为工号，real_name 为真实姓名
         db.execute_query("MERGE (u:User {username: 'T001'}) SET u.password = '123456', u.role = 'teacher', u.real_name = '张老师', u.college = '智慧双创学院'")
         db.execute_query("MERGE (u:User {username: 'T002'}) SET u.password = '123456', u.role = 'teacher', u.real_name = '王老师', u.college = '经管学院'")
+        
+        # 注入 Mock 管理员用户
+        db.execute_query("MERGE (u:User {username: 'admin'}) SET u.password = 'admin123', u.role = 'admin', u.real_name = '超级管理员', u.college = '校级管理中心'")
+        db.execute_query("MERGE (u:User {username: '001'}) SET u.password = '123456', u.role = 'admin', u.real_name = '管理员001', u.college = '系统维护部'")
     except Exception as e:
         print(f"Mock Teacher Injection failed (Neo4j possibly down): {e}")
 
@@ -460,12 +464,44 @@ def rename_project(project_id: int, request: RenameRequest):
 @app.delete("/api/projects/{project_id}")
 def delete_project_endpoint(project_id: int):
     conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM members WHERE project_id = ?", (project_id,))
-    cursor.execute("DELETE FROM deadlines WHERE project_id = ?", (project_id,))
-    cursor.execute("DELETE FROM evolution_logs WHERE project_id = ?", (project_id,))
-    cursor.execute("DELETE FROM project_commits WHERE project_id = ?", (project_id,))
+    
+    # 1. 物理回收附件文件
+    try:
+        cursor.execute("SELECT file_url FROM project_files WHERE project_id = ?", (project_id,))
+        files = cursor.fetchall()
+        for f in files:
+            file_url = f["file_url"]
+            try:
+                filename_part = file_url.split("/api/uploads/")[-1]
+                physical_path = os.path.join(UPLOAD_DIR, filename_part)
+                if os.path.exists(physical_path):
+                    os.remove(physical_path)
+            except Exception as fe:
+                print(f"Failed to remove file {file_url}: {fe}")
+    except Exception as e:
+        print(f"Error querying project files for deletion: {e}")
+
+    # 2. 清理数据库关联记录
+    related_tables = [
+        "project_files", 
+        "project_assessments", 
+        "teacher_interventions", 
+        "members", 
+        "deadlines", 
+        "evolution_logs", 
+        "project_commits"
+    ]
+    for table in related_tables:
+        try:
+            cursor.execute(f"DELETE FROM {table} WHERE project_id = ?", (project_id,))
+        except Exception as te:
+            print(f"Failed to clean table {table} for project {project_id}: {te}")
+
+    # 3. 删除项目本体
     cursor.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+    
     conn.commit()
     conn.close()
     return {"status": "ok"}
@@ -620,6 +656,68 @@ async def create_teacher_intervention(project_id: int, teacher_name: str, conten
 @app.get("/api/teacher/intervention-generator")
 async def generate_teaching_plan(teacher_name: str):
     return {"plan": f"建议针对您名下的项目开展一次【商业模式一致性】专项辅导。"}
+
+# --- Admin Endpoints ---
+
+@app.get("/api/admin/dashboard")
+def admin_dashboard():
+    """获取管理员全局概览数据"""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    # 1. 项目总数
+    cursor.execute("SELECT COUNT(*) as count FROM projects")
+    project_count = cursor.fetchone()["count"]
+    
+    # 2. 附件总数
+    cursor.execute("SELECT COUNT(*) as count FROM project_files")
+    file_count = cursor.fetchone()["count"]
+    
+    # 3. 学院分布状况
+    cursor.execute("SELECT college, COUNT(*) as count FROM projects GROUP BY college")
+    college_dist = {row["college"] or "未知": row["count"] for row in cursor.fetchall()}
+    
+    # 4. Neo4j 用户总数
+    user_count = 0
+    try:
+        user_result = db.execute_query("MATCH (u:User) RETURN count(u) as count")
+        if user_result:
+            user_count = user_result[0]["count"]
+    except: pass
+    
+    return {
+        "project_count": project_count,
+        "file_count": file_count,
+        "user_count": user_count,
+        "college_distribution": college_dist
+    }
+
+@app.get("/api/admin/users")
+def admin_get_users():
+    """获取 Neo4j 所有用户节点 (用于可视化)"""
+    try:
+        query = "MATCH (u:User) RETURN u.username as username, u.real_name as real_name, u.role as role, u.college as college"
+        result = db.execute_query(query)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/admin/projects")
+def admin_get_projects():
+    """获取 SQLite 所有项目及其关联信息"""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    query = """
+    SELECT p.*, 
+    (SELECT COUNT(*) FROM project_files pf WHERE pf.project_id = p.id) as file_count
+    FROM projects p
+    """
+    cursor.execute(query)
+    projects = [dict(row) for row in cursor.fetchall()]
+    return projects
 
 if __name__ == "__main__":
     import uvicorn

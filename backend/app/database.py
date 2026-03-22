@@ -128,6 +128,18 @@ def init_db():
     )
     """)
 
+    # 10. 项目文件表
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS project_files (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id INTEGER,
+        filename TEXT NOT NULL,
+        file_url TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (project_id) REFERENCES projects(id)
+    )
+    """)
+
     # 插入一些初始 Mock 数据
     cursor.execute("SELECT COUNT(*) FROM projects")
     if cursor.fetchone()[0] == 0:
