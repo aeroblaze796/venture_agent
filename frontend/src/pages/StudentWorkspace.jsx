@@ -136,6 +136,10 @@ const StudentWorkspace = () => {
     });
     setCurrentStep(0);
     setFormError("");
+    setEditorContent("");
+    setActiveFileId(null);
+    setActiveFileUrl(null);
+    setProjectFiles([]);
     setShowNewProjectModal(true);
   };
 
