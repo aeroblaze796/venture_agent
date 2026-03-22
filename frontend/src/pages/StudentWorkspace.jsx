@@ -115,7 +115,7 @@ const StudentWorkspace = () => {
   const [currentStep, setCurrentStep] = useState(0);
   const [formError, setFormError] = useState("");
   const [projectForm, setProjectForm] = useState({
-    name: '', competition: '互联网+', track: '高教主赛道', college: '', advisorName: '', advisorInfo: '', members: []
+    name: '', competition: '互联网+', track: '高教主赛道', college: '', advisorName: '', advisorId: '', advisorInfo: '', members: []
   });
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -127,6 +127,15 @@ const StudentWorkspace = () => {
     { label: '创新性', value: 85 }, { label: '落地性', value: 70 }, { label: '技术力', value: 90 },
     { label: '团队契合', value: 75 }, { label: '市场潜力', value: 80 }, { label: '合规性', value: 95 }
   ];
+
+  const handleOpenNewProject = () => {
+    setProjectForm({
+      name: '', competition: '互联网+', track: '高教主赛道', college: '', advisorName: '', advisorId: '', advisorInfo: '', members: []
+    });
+    setCurrentStep(0);
+    setFormError("");
+    setShowNewProjectModal(true);
+  };
 
   const fetchDashboardData = async () => {
     const username = localStorage.getItem("va_username") || "1120230571";
@@ -378,8 +387,9 @@ const StudentWorkspace = () => {
     if (currentStep === 1) {
       if (!projectForm.college.trim()) return "学院/书院不能为空";
       if (!isValidStr(projectForm.college)) return "学院名称无效（例如不能只填'1'，须不少于2个字）";
-      if (!projectForm.advisorName.trim()) return "指导老师不能为空";
+      if (!projectForm.advisorName.trim()) return "指导老师姓名不能为空";
       if (!isValidStr(projectForm.advisorName)) return "老师姓名无效";
+      if (!projectForm.advisorId.trim()) return "指导老师 ID 不能为空 (例如 T001)";
     }
     if (currentStep === 2) {
       for (let m of projectForm.members) {
@@ -470,6 +480,7 @@ const StudentWorkspace = () => {
       track: proj.track || '',
       college: proj.college || '',
       advisorName: proj.advisor_name || '',
+      advisorId: proj.advisor_id || '',
       advisorInfo: proj.advisor_info || '',
       members: (members || []).map(m => ({ ...m, student_id: m.student_id || '' }))
     });
@@ -580,7 +591,7 @@ const StudentWorkspace = () => {
               <div className="flex flex-col gap-4">
                 <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><FileTextOutlined /> Project Center</h2>
                 <div className="flex flex-col gap-3 w-full">
-                  <Button onClick={() => setShowNewProjectModal(true)} block shape="round" className="btn-new-chat h-11">发起项目</Button>
+                  <Button onClick={handleOpenNewProject} block shape="round" className="btn-new-chat h-11">发起项目</Button>
                   <Button onClick={() => setShowImportModal(true)} block shape="round" className="btn-import-project h-11">导入项目</Button>
                 </div>
               </div>
@@ -1124,7 +1135,7 @@ const StudentWorkspace = () => {
             <Steps current={currentStep} size="small" className="mb-8 px-4"><Steps.Step title={<span className="text-[10px] font-black uppercase">基础信息</span>} /><Steps.Step title={<span className="text-[10px] font-black uppercase">组织结构</span>} /><Steps.Step title={<span className="text-[10px] font-black uppercase">核心团队</span>} /></Steps>
             <div className="min-h-[400px]">
               {currentStep === 0 && (<div className="space-y-6 animate-slide-up"><div className="space-y-2"><label className="text-[10px] font-black text-slate-400 ml-1 uppercase">项目名称 (必填)</label><Input value={projectForm.name} onChange={e => setProjectForm({ ...projectForm, name: e.target.value })} className="h-12 rounded-2xl shadow-sm border-slate-100" placeholder="AI 驱动的..." /></div><div className="grid grid-cols-2 gap-4"><div className="space-y-2"><label className="text-[10px] font-black text-slate-400 ml-1 uppercase">所属比赛</label><Select value={projectForm.competition} onChange={v => setProjectForm({ ...projectForm, competition: v })} options={[{ value: '互联网+', label: '互联网+' }, { value: '挑战杯', label: '挑战杯' }, { value: '其他', label: '其他项目' }]} className="w-full h-12" /></div><div className="space-y-2"><label className="text-[10px] font-black text-slate-400 ml-1 uppercase">主攻赛道</label><Input value={projectForm.track} onChange={e => setProjectForm({ ...projectForm, track: e.target.value })} className="h-12 rounded-2xl border-slate-100" placeholder="高教主赛道" /></div></div></div>)}
-              {currentStep === 1 && (<div className="space-y-6 animate-slide-up"><div className="space-y-2"><label className="text-[10px] font-black text-slate-400 ml-1 uppercase">所属学院/书院 (必填)</label><Input value={projectForm.college} onChange={e => setProjectForm({ ...projectForm, college: e.target.value })} className="h-12 rounded-2xl border-slate-100" placeholder="徐特立书院" /></div><div className="grid grid-cols-2 gap-4"><div className="space-y-2"><label className="text-[10px] font-black text-slate-400 ml-1 uppercase">第一指导老师 (必填)</label><Input value={projectForm.advisorName} onChange={e => setProjectForm({ ...projectForm, advisorName: e.target.value })} className="h-12 rounded-2xl border-slate-100" placeholder="张三 教授" /></div><div className="space-y-2"><label className="text-[10px] font-black text-slate-400 ml-1 uppercase">指导导师简介 (将同步至人员库)</label><Input value={projectForm.advisorInfo} onChange={e => setProjectForm({ ...projectForm, advisorInfo: e.target.value })} className="h-12 rounded-2xl border-slate-100" placeholder="研究方向、核心专长等" /></div></div></div>)}
+              {currentStep === 1 && (<div className="space-y-6 animate-slide-up"><div className="space-y-2"><label className="text-[10px] font-black text-slate-400 ml-1 uppercase">所属学院/书院 (必填)</label><Input value={projectForm.college} onChange={e => setProjectForm({ ...projectForm, college: e.target.value })} className="h-12 rounded-2xl border-slate-100" placeholder="徐特立书院" /></div><div className="grid grid-cols-2 gap-4"><div className="space-y-2"><label className="text-[10px] font-black text-slate-400 ml-1 uppercase">第一指导老师 (必填)</label><Input value={projectForm.advisorName} onChange={e => setProjectForm({ ...projectForm, advisorName: e.target.value })} className="h-12 rounded-2xl border-slate-100" placeholder="张三 教授" /></div><div className="space-y-2"><label className="text-[10px] font-black text-slate-400 ml-1 uppercase">老师 ID (用于同步, 如 T001)</label><Input value={projectForm.advisorId} onChange={e => setProjectForm({ ...projectForm, advisorId: e.target.value })} className="h-12 rounded-2xl border-slate-100 font-bold" placeholder="输入老师工号" /></div></div><div className="space-y-2"><label className="text-[10px] font-black text-slate-400 ml-1 uppercase">指导导师简介 (将同步至人员库)</label><Input value={projectForm.advisorInfo} onChange={e => setProjectForm({ ...projectForm, advisorInfo: e.target.value })} className="h-12 rounded-2xl border-slate-100" placeholder="研究方向、核心专长等" /></div></div>)}
               {currentStep === 2 && (<div className="space-y-4 animate-slide-up">
                 <div className="flex justify-between items-center"><label className="text-[10px] font-black text-slate-400 ml-1 uppercase">核心团队录入 (包含专业等深度字段)</label><Button onClick={addMember} size="small" shape="round" className="text-[10px] font-black px-4 bg-indigo-50 text-indigo-600 border-none">添加成员</Button></div>
                 <div className="max-h-[340px] overflow-y-auto space-y-4 pr-1 custom-scrollbar">

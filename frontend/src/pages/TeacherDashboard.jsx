@@ -25,6 +25,48 @@ import {
 const { TabPane } = Tabs;
 const { TextArea } = Input;
 
+const RadarChart = ({ data }) => {
+  if (!data) return null;
+  const scores = [
+    data.r1_score || data.r1 || 0, data.r2_score || data.r2 || 0, 
+    data.r3_score || data.r3 || 0, data.r4_score || data.r4 || 0, 
+    data.r5_score || data.r5 || 0, data.r6_score || data.r6 || 0,
+    data.r7_score || data.r7 || 0, data.r8_score || data.r8 || 0,
+    data.r9_score || data.r9 || 0
+  ];
+  const labels = ["R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9"];
+  const centerX = 100, centerY = 100, radius = 70;
+  const points = scores.map((s, i) => {
+    const angle = (Math.PI * 2 * i) / 9 - Math.PI / 2;
+    const r = (s / 5) * radius;
+    return `${centerX + r * Math.cos(angle)},${centerY + r * Math.sin(angle)}`;
+  }).join(' ');
+
+  return (
+    <svg width="200" height="200" viewBox="0 0 200 200" className="mx-auto overflow-visible">
+      {/* 网格线 */}
+      {[1, 2, 3, 4, 5].map(tick => (
+        <polygon 
+          key={tick}
+          points={labels.map((_, i) => {
+            const angle = (Math.PI * 2 * i) / 9 - Math.PI / 2;
+            const r = (tick / 5) * radius;
+            return `${centerX + r * Math.cos(angle)},${centerY + r * Math.sin(angle)}`;
+          }).join(' ')}
+          fill="none" stroke="#e2e8f0" strokeWidth="1"
+        />
+      ))}
+      <polygon points={points} fill="rgba(16, 185, 129, 0.2)" stroke="#10b981" strokeWidth="2" />
+      {labels.map((l, i) => {
+        const angle = (Math.PI * 2 * i) / 9 - Math.PI / 2;
+        const x = centerX + (radius + 15) * Math.cos(angle);
+        const y = centerY + (radius + 15) * Math.sin(angle);
+        return <text key={l} x={x} y={y} fontSize="10" fontWeight="bold" textAnchor="middle" alignmentBaseline="middle" fill="#94a3b8">{l}</text>;
+      })}
+    </svg>
+  );
+};
+
 export default function TeacherDashboard() {
   const navigate = useNavigate();
   const [activeMenu, setActiveMenu] = useState('overview'); // 'overview' 或 项目ID
@@ -40,8 +82,10 @@ export default function TeacherDashboard() {
   const [interventionText, setInterventionText] = useState('');
   const [auditLoading, setAuditLoading] = useState(false);
   
+  const [teacherId, setTeacherId] = useState(localStorage.getItem('va_teacher_id') || 'T001');
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [editName, setEditName] = useState(teacherName);
+  const [editId, setEditId] = useState(teacherId);
 
   useEffect(() => {
     if (!teacherName) {
@@ -49,16 +93,15 @@ export default function TeacherDashboard() {
       return;
     }
     fetchDashboardData();
-  }, [teacherName]);
+  }, [teacherName, teacherId]);
 
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:8000/api/teacher/dashboard?teacher_name=${encodeURIComponent(teacherName)}`);
+      const res = await fetch(`http://localhost:8000/api/teacher/dashboard?teacher_id=${encodeURIComponent(teacherId)}`);
       const data = await res.json();
       setProjects(data.projects || []);
       setStats(data.stats || { student_count: 0, project_count: 0, high_risk_count: 0 });
-      setCoverage(data.coverage || {});
       setTopMistakes(data.top_mistakes || []);
     } catch (e) {
       antMessage.error("获取大盘数据失败");
@@ -306,12 +349,15 @@ export default function TeacherDashboard() {
                 {/* 评分看板 */}
                 <div className="col-span-4 space-y-6">
                   <Card title="R1-R9 专业打分分布" className="border-none shadow-sm rounded-2xl">
+                    <div className="mb-6 pt-2">
+                       <RadarChart data={projectDetail?.assessment} />
+                    </div>
                     <div className="space-y-4">
                       {[
-                        { label: 'R1 痛点挖掘深度', score: projectDetail?.assessment?.r1_score },
+                        { label: 'R1 创新性', score: projectDetail?.assessment?.r1_score },
                         { label: 'R2 证据可靠度', score: projectDetail?.assessment?.r2_score },
-                        { label: 'R8 财务盈利能力', score: projectDetail?.assessment?.r8_score },
-                        { label: 'R9 团队背景契合', score: projectDetail?.assessment?.r9_score }
+                        { label: 'R8 盈利能力', score: projectDetail?.assessment?.r8_score },
+                        { label: 'R9 团队背景', score: projectDetail?.assessment?.r9_score }
                       ].map((r, i) => (
                         <div key={i} className="flex flex-col">
                           <div className="flex justify-between text-xs mb-1 font-bold text-slate-500">
@@ -324,13 +370,26 @@ export default function TeacherDashboard() {
                     </div>
                   </Card>
 
-                  <Card title="项目核心风险画像" className="border-none shadow-sm rounded-2xl">
-                     <div className="flex items-center justify-center p-4">
-                        <Tag color="red" className="px-4 py-2 text-lg font-bold rounded-xl border-none shadow-sm">
-                           {projectDetail?.assessment?.overall_risk || '评估中'} 风险
-                        </Tag>
+                  <Card title="项目核心风险画像 (R1-R9 评估)" className="border-none shadow-sm rounded-2xl overflow-hidden">
+                     <div className="flex flex-col items-center justify-center p-4">
+                        <RadarChart data={{
+                          r1: projectDetail?.assessment?.r1_score,
+                          r2: projectDetail?.assessment?.r2_score,
+                          r3: projectDetail?.assessment?.r3_score,
+                          r4: projectDetail?.assessment?.r4_score,
+                          r5: projectDetail?.assessment?.r5_score,
+                          r6: projectDetail?.assessment?.r6_score,
+                          r7: projectDetail?.assessment?.r7_score,
+                          r8: projectDetail?.assessment?.r8_score,
+                          r9: projectDetail?.assessment?.r9_score
+                        }} />
+                        <div className="mt-6">
+                          <Tag color="red" className="px-6 py-2 text-xl font-bold rounded-2xl border-none shadow-lg">
+                            {projectDetail?.assessment?.overall_risk || '评估中'} 风险
+                          </Tag>
+                        </div>
                      </div>
-                     <p className="text-center text-[11px] text-slate-400 mt-2 uppercase tracking-widest font-black">AI 自动定级结论</p>
+                     <p className="text-center text-[10px] text-slate-400 mt-2 uppercase tracking-widest font-black">AI 自动定级结论</p>
                   </Card>
                 </div>
 
@@ -394,9 +453,11 @@ export default function TeacherDashboard() {
         onCancel={() => setShowProfileModal(false)}
         onOk={() => {
           localStorage.setItem('va_username', editName);
+          localStorage.setItem('va_teacher_id', editId);
           setTeacherName(editName);
+          setTeacherId(editId);
           setShowProfileModal(false);
-          antMessage.success("设置已更新");
+          antMessage.success("设置已更新，数据已同步");
         }}
         okButtonProps={{ className: 'bg-emerald-600 font-bold px-6 rounded-lg border-none' }}
         okText="保存"
@@ -407,10 +468,16 @@ export default function TeacherDashboard() {
               <Avatar size={80} src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${editName}`} border="4px solid #10b981" />
               <div className="text-center font-bold text-lg text-slate-800">{editName}</div>
            </div>
-           <div>
-             <label className="text-xs text-slate-400 font-bold uppercase mb-2 block">显示姓名 (公开署名)</label>
-             <Input size="large" value={editName} onChange={e => setEditName(e.target.value)} className="rounded-xl" />
-           </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs text-slate-400 font-bold uppercase mb-2 block">显示姓名 (公开署名)</label>
+                <Input size="large" value={editName} onChange={e => setEditName(e.target.value)} className="rounded-xl" />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 font-bold uppercase mb-2 block">唯一教师 ID (关键同步码)</label>
+                <Input size="large" value={editId} onChange={e => setEditId(e.target.value)} className="rounded-xl font-mono" placeholder="如 T001" />
+              </div>
+            </div>
            <p className="text-[11px] text-slate-400 italic bg-amber-50 p-3 rounded-lg border border-amber-100">
              安全提示：您的辅导指令将以加密形式传输，学生无法直接查看锦囊源码，但会感知到对话逻辑的侧重变化。
            </p>

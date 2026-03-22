@@ -167,7 +167,7 @@ def migrate_db():
     existing_cols = [row[1] for row in cursor.fetchall()]
     new_cols = [
         ("competition", "TEXT"), ("track", "TEXT"), ("college", "TEXT"),
-        ("advisor_name", "TEXT"), ("advisor_info", "TEXT")
+        ("advisor_name", "TEXT"), ("advisor_info", "TEXT"), ("advisor_id", "TEXT")
     ]
     for col_name, col_type in new_cols:
         if col_name not in existing_cols:

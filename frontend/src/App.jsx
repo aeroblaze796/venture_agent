@@ -55,8 +55,18 @@ function Portal() {
         if (response.ok) {
           localStorage.setItem('va_username', data.username);
           localStorage.setItem('va_token', data.token);
-          localStorage.setItem('va_role', targetRole === '/teacher' ? 'teacher' : 'student');
-          navigate(targetRole);
+          
+          // 优先使用后端返回的角色，如果没有则回退到点击的侧导向角色
+          const finalRole = data.role || (targetRole === '/teacher' ? 'teacher' : 'student');
+          localStorage.setItem('va_role', finalRole);
+          
+          if (data.teacher_id) {
+            localStorage.setItem('va_teacher_id', data.teacher_id);
+          }
+          
+          // 如果后端返回的角色与目标不符，跳转到真正角色对应的页面
+          const actualPath = finalRole === 'teacher' ? '/teacher' : '/student';
+          navigate(actualPath);
         } else {
           setErrorMsg(data.detail || '登录失败，请检查用户名或密码');
         }
@@ -97,11 +107,14 @@ function Portal() {
         localStorage.setItem('va_school', school);
         localStorage.setItem('va_major', major);
         localStorage.setItem('va_grade', grade);
-        localStorage.setItem('va_token', username); // 使用用户名作为 mock token
-        localStorage.setItem('va_role', targetRole === '/teacher' ? 'teacher' : 'student');
+        localStorage.setItem('va_token', username); 
+        
+        const finalRole = targetRole === '/teacher' ? 'teacher' : 'student';
+        localStorage.setItem('va_role', finalRole);
+        
         setShowLoginModal(false);
         setShowOnboarding(false);
-        navigate(targetRole);
+        navigate(finalRole === 'teacher' ? '/teacher' : '/student');
       } else {
         setErrorMsg(data.detail || '注册失败，请稍后重试');
         // 如果注册失败，可能由于用户名冲突等，返回登录/注册初始态
@@ -372,9 +385,12 @@ function RoleGuard({ children, requiredRole }) {
   
   if (!username) return <Navigate to="/" replace />;
   
-  // 如果请求的是教师端，但当前角色不是老师，则重定向
+  // 角色严控：路径与角色必须精准匹配
   if (requiredRole === 'teacher' && role !== 'teacher') {
     return <Navigate to="/student" replace />;
+  }
+  if (requiredRole === 'student' && role === 'teacher') {
+    return <Navigate to="/teacher" replace />;
   }
   
   return children;

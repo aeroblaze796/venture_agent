@@ -36,6 +36,7 @@ def register(user: UserRegister):
         school: $school,
         major: $major,
         grade: $grade,
+        role: 'student',
         created_at: timestamp()
     })
     RETURN u.username AS username
@@ -57,12 +58,18 @@ def register(user: UserRegister):
 
 @auth_router.post("/login")
 def login(user: UserAuth):
-    query = "MATCH (u:User {username: $username, password: $password}) RETURN u.username AS username"
+    query = "MATCH (u:User {username: $username, password: $password}) RETURN u.username AS username, u.teacher_id AS teacher_id, u.role AS role"
     result = db.execute_query(query, {"username": user.username, "password": user.password})
     
     if not result:
         raise HTTPException(status_code=401, detail="用户名或密码错误")
     
-    username = result[0]["username"]
+    user_data = result[0]
     # MVP 直接将用户名作为 token
-    return {"message": "登录成功", "token": username, "username": username}
+    return {
+        "message": "登录成功", 
+        "token": user_data["username"], 
+        "username": user_data["username"],
+        "teacher_id": user_data.get("teacher_id"),
+        "role": user_data.get("role")
+    }

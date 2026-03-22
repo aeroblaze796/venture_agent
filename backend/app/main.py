@@ -8,10 +8,14 @@ import shutil
 import uuid
 import sqlite3
 import datetime
+import asyncio
 from typing import Optional, List
 from pydantic import BaseModel
 
 # 导入本地模块
+UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "uploads")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
 from app.auth import auth_router
 from app.database import (
     DB_PATH,
@@ -45,8 +49,7 @@ app.add_middleware(
 
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 
-os.makedirs("uploads", exist_ok=True)
-app.mount("/api/uploads", StaticFiles(directory="uploads"), name="uploads")
+app.mount("/api/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 # --- Models ---
 
@@ -85,6 +88,7 @@ class ProjectCreateRequest(BaseModel):
     track: Optional[str] = None
     college: Optional[str] = None
     advisorName: Optional[str] = None
+    advisorId: Optional[str] = None
     advisorInfo: Optional[str] = None
     content: Optional[str] = ""
     members: List[MemberInfo] = []
@@ -109,9 +113,9 @@ def on_startup():
     # 注入 Mock 教师用户到账户库 (方便用户直接登录测试)
     from app.ingestion.db_config import db
     try:
-        # 使用 MERGE 确保不重复创建
-        db.execute_query("MERGE (u:User {username: '张老师'}) ON CREATE SET u.password = '123456', u.role = 'teacher'")
-        db.execute_query("MERGE (u:User {username: '王老师'}) ON CREATE SET u.password = '123456', u.role = 'teacher'")
+        # 使用 MERGE 确认 Mock 教师 ID
+        db.execute_query("MERGE (u:User {username: '张老师'}) SET u.password = '123456', u.role = 'teacher', u.teacher_id = 'T001'")
+        db.execute_query("MERGE (u:User {username: '王老师'}) SET u.password = '123456', u.role = 'teacher', u.teacher_id = 'T002'")
     except Exception as e:
         print(f"Mock Teacher Injection failed (Neo4j possibly down): {e}")
 
@@ -192,9 +196,9 @@ def create_project_endpoint(project: ProjectCreateRequest):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO projects (name, owner_id, competition, track, college, advisor_name, advisor_info, content)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    """, (project.name, project.owner_id, project.competition, project.track, project.college, project.advisorName, project.advisorInfo, project.content))
+        INSERT INTO projects (name, owner_id, competition, track, college, advisor_name, advisor_id, advisor_info, content)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (project.name, project.owner_id, project.competition, project.track, project.college, project.advisorName, project.advisorId, project.advisorInfo, project.content))
     project_id = cursor.lastrowid
     
     today = datetime.date.today()
@@ -245,7 +249,7 @@ async def import_project_file(file: UploadFile = File(...), project_id: Optional
     content = ""
     filename = file.filename
     unique_filename = f"{uuid.uuid4().hex}_{filename}"
-    upload_path = os.path.join("uploads", unique_filename)
+    upload_path = os.path.join(UPLOAD_DIR, unique_filename)
     
     with open(upload_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
@@ -271,10 +275,17 @@ async def import_project_file(file: UploadFile = File(...), project_id: Optional
         conn = sqlite3.connect(DB_PATH)
         cur = conn.cursor()
         cur.execute("INSERT INTO project_files (project_id, filename, file_url) VALUES (?, ?, ?)", (project_id, filename, file_url))
+        file_id = cur.lastrowid
         conn.commit()
         conn.close()
-        
-    return {"text": content, "filename": filename, "file_url": file_url}
+        # 自动触发一次后台审计 (异步化非阻塞)
+        if project_id:
+            try:
+                import threading
+                threading.Thread(target=lambda: asyncio.run(trigger_ai_audit(project_id)), daemon=True).start()
+            except: pass
+
+        return {"status": "ok", "text": content, "filename": filename, "file_id": file_id, "file_url": f"/api/uploads/{unique_filename}"}
 
 @app.get("/api/projects/{project_id}/files")
 def get_project_files(project_id: int):
@@ -301,7 +312,7 @@ async def get_project_file_content(project_id: int, file_id: int):
     content = ""
     try:
         filename_part = file_url.split("/api/uploads/")[-1]
-        physical_path = os.path.join("uploads", filename_part)
+        physical_path = os.path.join(UPLOAD_DIR, filename_part)
         if filename.endswith(".pdf"):
             with open(physical_path, "rb") as f:
                 pdf_reader = pypdf.PdfReader(f)
@@ -330,7 +341,7 @@ def delete_project_file(file_id: int):
     file_url = row["file_url"]
     try:
         filename_part = file_url.split("/api/uploads/")[-1]
-        physical_path = os.path.join("uploads", filename_part)
+        physical_path = os.path.join(UPLOAD_DIR, filename_part)
         if os.path.exists(physical_path): os.remove(physical_path)
     except Exception: pass
     cursor.execute("DELETE FROM project_files WHERE id = ?", (file_id,))
@@ -405,29 +416,29 @@ def delete_project_endpoint(project_id: int):
 # --- 教师端 API 接口 ---
 
 @app.get("/api/teacher/dashboard")
-async def get_teacher_dashboard(teacher_name: str):
+async def get_teacher_dashboard(teacher_id: str):
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     
-    # 获取名下所有项目及基础评估
+    # 获取名下所有项目及基础评估 (按 advisor_id 过滤)
     cursor.execute("""
         SELECT p.id, p.name as name, p.owner_id as leader, p.college, p.competition,
                pa.overall_risk as risk_level, pa.audit_summary
         FROM projects p
         LEFT JOIN project_assessments pa ON p.id = pa.project_id
-        WHERE p.advisor_name = ?
-    """, (teacher_name,))
+        WHERE p.advisor_id = ?
+    """, (teacher_id,))
     projects_rows = cursor.fetchall()
     projects = [dict(row) for row in projects_rows]
     
-    # 统计辅导学生总数 (Distinct student_id from members where project advisor is teacher)
+    # 统计辅导学生总数
     cursor.execute("""
         SELECT COUNT(DISTINCT m.student_id) as student_count
         FROM members m
         JOIN projects p ON m.project_id = p.id
-        WHERE p.advisor_name = ? AND m.role != 'Advisor'
-    """, (teacher_name,))
+        WHERE p.advisor_id = ? AND m.role != 'Advisor'
+    """, (teacher_id,))
     student_count = cursor.fetchone()['student_count'] or 0
     
     # 统计高频错误 (基于 H 原则)
