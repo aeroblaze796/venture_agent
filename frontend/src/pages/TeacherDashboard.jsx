@@ -71,7 +71,8 @@ const RadarChart = ({ data }) => {
 export default function TeacherDashboard() {
   const navigate = useNavigate();
   const [activeMenu, setActiveMenu] = useState('overview'); // 'overview' 或 项目ID
-  const [teacherName, setTeacherName] = useState(localStorage.getItem('va_username') || '老师');
+  const [teacherName, setTeacherName] = useState(localStorage.getItem('va_realname') || '指导老师');
+  const [teacherId, setTeacherId] = useState(localStorage.getItem('va_username') || 'T001');
   const [loading, setLoading] = useState(false);
   
   // 数据状态
@@ -82,8 +83,6 @@ export default function TeacherDashboard() {
   const [projectDetail, setProjectDetail] = useState(null);
   const [interventionText, setInterventionText] = useState('');
   const [auditLoading, setAuditLoading] = useState(false);
-  
-  const [teacherId, setTeacherId] = useState(localStorage.getItem('va_teacher_id') || 'T001');
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [editName, setEditName] = useState(teacherName);
   const [editId, setEditId] = useState(teacherId);
@@ -104,6 +103,11 @@ export default function TeacherDashboard() {
       setProjects(data.projects || []);
       setStats(data.stats || { student_count: 0, project_count: 0, high_risk_count: 0 });
       setTopMistakes(data.top_mistakes || []);
+      
+      // 如果当前正在查看某个项目详情，同步刷新详情
+      if (activeMenu !== 'overview') {
+        await selectProject(parseInt(activeMenu));
+      }
     } catch (e) {
       antMessage.error("获取大盘数据失败");
     } finally {
@@ -161,9 +165,7 @@ export default function TeacherDashboard() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('va_token');
-    localStorage.removeItem('va_username');
-    localStorage.removeItem('va_role');
+    localStorage.clear();
     navigate('/');
   };
 
@@ -459,8 +461,8 @@ export default function TeacherDashboard() {
         visible={showProfileModal} 
         onCancel={() => setShowProfileModal(false)}
         onOk={() => {
-          localStorage.setItem('va_username', editName);
-          localStorage.setItem('va_teacher_id', editId);
+          localStorage.setItem('va_realname', editName);
+          localStorage.setItem('va_username', editId);
           setTeacherName(editName);
           setTeacherId(editId);
           setShowProfileModal(false);

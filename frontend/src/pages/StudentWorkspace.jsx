@@ -152,9 +152,10 @@ const StudentWorkspace = () => {
       const data = await res.json();
       if (data && data.projects) {
         setSyncData(data);
-        if (activeProjectId && !activeFileId) {
+        if (activeProjectId) {
+          await fetchProjectFiles(activeProjectId);
           const curProj = (data.projects || []).find(p => p.id === activeProjectId);
-          if (curProj) setEditorContent(curProj.content || "");
+          if (curProj && !activeFileId) setEditorContent(curProj.content || "");
         }
       }
     } catch (e) {
@@ -417,10 +418,15 @@ const StudentWorkspace = () => {
       if (!projectForm.advisorId.trim()) return "指导老师 ID 不能为空 (例如 T001)";
     }
     if (currentStep === 2) {
+      if (projectForm.members.length === 0) return "至少需要添加一名成员";
+      let hasLeader = projectForm.members.some(m => m.role === 'Leader' || m.role === '组长');
+      if (!hasLeader) return "本项目尚未指派负责人（组长），请在身份中选择'队长'或'组长'";
+      
       for (let m of projectForm.members) {
         if (!m.name.trim()) return "团队成员姓名不能为空";
-        if (!isValidStr(m.name)) return `成员姓名无效`;
+        if (!isValidStr(m.name)) return `成员姓名 [${m.name}] 无效`;
         if (m.student_id && isNumeric(m.student_id) && m.student_id.length < 5) return `学号 [${m.student_id}] 格式不正确`;
+        if (!m.college?.trim()) return `成员 [${m.name}] 的学院信息不能为空`;
       }
     }
     return null;
@@ -444,14 +450,14 @@ const StudentWorkspace = () => {
       });
       if (resp.ok) {
         const result = await resp.json();
-        message.success('项目申报成功！');
+        message.success('项目申报成功！实名校验已通过。');
         setShowNewProjectModal(false);
         setCurrentStep(0);
         await fetchDashboardData();
         if (result.project_id) { setActiveProjectId(result.project_id); setActivePage('editor'); }
       } else {
         const data = await resp.json();
-        setFormError(data.detail || "后端服务响应错误，请检查输入任务进展同步");
+        setFormError(data.detail || "后端核验逻辑异常，请检查成员学号与姓名是否准确");
       }
     } catch (err) {
       console.error(err);
@@ -1222,7 +1228,13 @@ const StudentWorkspace = () => {
         </Modal>
 
         <Modal title={<span className="font-black">个人中心</span>} open={showProfileModal} onCancel={() => setShowProfileModal(false)} footer={null} centered width={400} className="premium-modal no-border-modal">
-          <div className="flex flex-col items-center py-6"><Avatar size={80} className="mb-4 shadow-xl border-4 border-white" src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" /><h3>{localStorage.getItem('va_username') || '王小明'}</h3><p className="text-slate-400 font-black text-[10px] uppercase tracking-widest">{localStorage.getItem('va_school') || '创新实验班'}</p><Button danger block className="mt-8 h-12 rounded-2xl font-black shadow-lg shadow-red-50" onClick={() => { localStorage.clear(); window.location.reload(); }}>安全退出</Button></div>
+          <div className="flex flex-col items-center py-6">
+            <Avatar size={80} className="mb-4 shadow-xl border-4 border-white" src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${localStorage.getItem('va_realname') || 'User'}`} />
+            <h3 className="mb-0">{localStorage.getItem('va_realname') || '访客'}</h3>
+            <p className="text-slate-400 font-black text-[10px] uppercase tracking-widest mt-1">ID: {localStorage.getItem('va_username') || 'Unidentified'}</p>
+            <p className="text-slate-500 font-bold text-xs">{localStorage.getItem('va_school') || '所属机构/学院'}</p>
+            <Button danger block className="mt-8 h-12 rounded-2xl font-black shadow-lg shadow-red-50" onClick={() => { localStorage.clear(); window.location.reload(); }}>安全退出</Button>
+          </div>
         </Modal>
       </div>
     </ConfigProvider>

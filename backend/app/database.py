@@ -204,8 +204,12 @@ def get_dashboard_data(user_id: str):
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     
-    # 1. 获取用户所有的项目
-    cursor.execute("SELECT * FROM projects WHERE owner_id = ?", (user_id,))
+    # 1. 获取用户参与的所有项目 (作为 Owner 或 成员)
+    cursor.execute("""
+        SELECT DISTINCT p.* FROM projects p
+        LEFT JOIN members m ON p.id = m.project_id
+        WHERE p.owner_id = ? OR m.student_id = ?
+    """, (user_id, user_id))
     projects_rows = cursor.fetchall()
     
     if not projects_rows:

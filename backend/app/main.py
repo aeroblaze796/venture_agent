@@ -31,6 +31,7 @@ from app.database import (
 )
 from langchain_core.messages import HumanMessage
 from app.agent.graph import app_graph
+from app.ingestion.db_config import db
 
 app = FastAPI(
     title="VentureAgent API",
@@ -193,6 +194,44 @@ def chat_endpoint(request: ChatRequest):
 
 @app.post("/api/projects")
 def create_project_endpoint(project: ProjectCreateRequest):
+    # 1. 组长必填性核验
+    has_leader = any(m.role in ["Leader", "组长"] for m in project.members)
+    if not has_leader:
+        raise HTTPException(status_code=400, detail="项目必须包含至少一名组长（Leader/组长）")
+
+    # 2. 指导老师实名核验 (Neo4j)
+    if project.advisorName:
+        # 判断真实姓名、工号、学院是否匹配
+        verify_advisor_q = """
+            MATCH (u:User {role: 'teacher', real_name: $name, username: $id, college: $college}) 
+            RETURN u
+        """
+        advisor_res = db.execute_query(verify_advisor_q, {
+            "name": project.advisorName, 
+            "id": project.advisorId, 
+            "college": project.college
+        })
+        if not advisor_res:
+            raise HTTPException(status_code=400, detail=f"指导老师校验失败：无法在系统中找到名为 {project.advisorName}、工号为 {project.advisorId} 且属于 {project.college} 的已注册教师。")
+
+    # 3. 团队成员实名核验 (Neo4j)
+    for m in project.members:
+        # 判断真实姓名、学号、学院、专业、年级是否匹配
+        # 这里允许 m.college 为空则回退到项目所属学院
+        verify_member_q = """
+            MATCH (u:User {role: 'student', real_name: $name, username: $id, college: $college, major: $major, grade: $grade}) 
+            RETURN u
+        """
+        member_res = db.execute_query(verify_member_q, {
+            "name": m.name,
+            "id": m.student_id,
+            "college": m.college or project.college,
+            "major": m.major,
+            "grade": m.grade
+        })
+        if not member_res:
+            raise HTTPException(status_code=400, detail=f"成员校验失败：名为 {m.name}、学号为 {m.student_id} 的同学未注册或填写的学院专业年级信息有误。")
+
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("""
@@ -230,15 +269,15 @@ def create_project_endpoint(project: ProjectCreateRequest):
     
     if project.advisorName:
         cursor.execute("""
-            INSERT INTO members (project_id, name, role, position, info, college)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (project_id, project.advisorName, "Advisor", "指导老师", project.advisorInfo, project.college))
+            INSERT INTO members (project_id, name, student_id, role, position, info, college)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (project_id, project.advisorName, project.advisorId, "Advisor", "指导老师", project.advisorInfo, project.college))
 
     for m in project.members:
         cursor.execute("""
             INSERT INTO members (project_id, name, student_id, college, major, grade, role, position, info)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (project_id, m.name, m.student_id, m.college, m.major, m.grade, m.role, m.position, m.info))
+        """, (project_id, m.name, m.student_id, m.college or project.college, m.major, m.grade, m.role, m.position, m.info))
 
     conn.commit()
     conn.close()

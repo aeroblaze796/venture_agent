@@ -6,45 +6,50 @@ from app.ingestion.db_config import db
 auth_router = APIRouter()
 
 class UserAuth(BaseModel):
-    username: str
+    username: str  # 这里对应学号或工号
     password: str
 
 class UserRegister(BaseModel):
-    username: str
+    role: str  # 'student' or 'teacher'
+    real_name: str
+    id_num: str  # 对于学生是学号，对于教师是工号
     password: str
-    school: Optional[str] = None
-    major: Optional[str] = None
-    grade: Optional[str] = None
+    college: Optional[str] = None
+    major: Optional[str] = None  # 仅学生
+    grade: Optional[str] = None  # 仅学生
 
 @auth_router.post("/register")
 def register(user: UserRegister):
-    if not user.username or not user.password:
-        raise HTTPException(status_code=400, detail="用户名或密码不能为空")
+    if not user.id_num or not user.password or not user.real_name:
+        raise HTTPException(status_code=400, detail="姓名、ID号或密码不能为空")
     
-    # 检查用户是否已存在
-    check_query = "MATCH (u:User {username: $username}) RETURN u"
-    existing_user = db.execute_query(check_query, {"username": user.username})
+    # 检查用户是否已存在 (按 ID 号唯一性校验)
+    check_query = "MATCH (u:User {username: $id_num}) RETURN u"
+    existing_user = db.execute_query(check_query, {"id_num": user.id_num})
     
     if existing_user:
-        raise HTTPException(status_code=400, detail="该用户名已被注册")
+        raise HTTPException(status_code=400, detail="该 ID 号已被注册")
     
     # 创建新用户节点
     create_query = """
     CREATE (u:User {
-        username: $username, 
+        username: $id_num, 
+        real_name: $real_name,
         password: $password,
-        school: $school,
+        role: $role,
+        college: $college,
         major: $major,
         grade: $grade,
-        role: 'student',
         created_at: timestamp()
     })
     RETURN u.username AS username
     """
     params = {
-        "username": user.username,
+        "id_num": user.id_num,
+        "real_name": user.real_name,
         "password": user.password,
-        "school": user.school,
+        "role": user.role,
+        "college": user.college,
         "major": user.major,
         "grade": user.grade
     }
@@ -54,22 +59,24 @@ def register(user: UserRegister):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"数据库写入失败: {str(e)}")
         
-    return {"message": "注册成功", "username": user.username}
+    return {"message": "注册成功", "username": user.id_num, "real_name": user.real_name}
 
 @auth_router.post("/login")
 def login(user: UserAuth):
-    query = "MATCH (u:User {username: $username, password: $password}) RETURN u.username AS username, u.teacher_id AS teacher_id, u.role AS role"
+    # 登录时 username 对应注册时的 id_num (即存储在 Neo4j 的 username 属性中)
+    query = "MATCH (u:User {username: $username, password: $password}) RETURN u.username AS username, u.real_name AS real_name, u.role AS role, u.college AS college"
     result = db.execute_query(query, {"username": user.username, "password": user.password})
     
     if not result:
-        raise HTTPException(status_code=401, detail="用户名或密码错误")
+        raise HTTPException(status_code=401, detail="ID 号或密码错误")
     
     user_data = result[0]
-    # MVP 直接将用户名作为 token
     return {
         "message": "登录成功", 
         "token": user_data["username"], 
         "username": user_data["username"],
-        "teacher_id": user_data.get("teacher_id"),
-        "role": user_data.get("role")
+        "real_name": user_data.get("real_name"),
+        "role": user_data.get("role"),
+        "college": user_data.get("college"),
+        "teacher_id": user_data["username"] if user_data.get("role") == 'teacher' else None
     }

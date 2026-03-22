@@ -13,8 +13,10 @@ function Portal() {
   const [major, setMajor] = useState('');
   const [grade, setGrade] = useState('');
   const [targetRole, setTargetRole] = useState('/student');
-  const [username, setUsername] = useState('');
+  const [username, setUsername] = useState(''); // 登录时输入学号/工号
   const [password, setPassword] = useState('');
+  const [realName, setRealName] = useState('');
+  const [idNum, setIdNum] = useState(''); // 注册时输入的学号/工号
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -32,7 +34,7 @@ function Portal() {
   const handleAuth = async (e) => {
     e.preventDefault();
     if (!username || !password) {
-      setErrorMsg('用户名或密码不能为空');
+      setErrorMsg('学号/工号或密码不能为空');
       return;
     }
     
@@ -47,14 +49,16 @@ function Portal() {
         const response = await fetch('http://localhost:8000/api/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, password }),
+          body: JSON.stringify({ username: username, password: password }),
         });
         
         const data = await response.json();
         
         if (response.ok) {
           localStorage.setItem('va_username', data.username);
+          localStorage.setItem('va_realname', data.real_name);
           localStorage.setItem('va_token', data.token);
+          localStorage.setItem('va_college', data.college);
           
           // 优先使用后端返回的角色，如果没有则回退到点击的侧导向角色
           const finalRole = data.role || (targetRole === '/teacher' ? 'teacher' : 'student');
@@ -68,7 +72,7 @@ function Portal() {
           const actualPath = finalRole === 'teacher' ? '/teacher' : '/student';
           navigate(actualPath);
         } else {
-          setErrorMsg(data.detail || '登录失败，请检查用户名或密码');
+          setErrorMsg(data.detail || '登录失败，请检查学号/工号或密码');
         }
       }
     } catch (err) {
@@ -80,36 +84,39 @@ function Portal() {
 
   const handleOnboardingSubmit = async (e) => {
     e.preventDefault();
-    if (!school || !major || !grade) {
-      setErrorMsg('请填写完整的参赛信息');
+    if (!realName || !idNum || !school) {
+      setErrorMsg('请填写完整的注册信息');
       return;
     }
 
     setIsLoading(true);
     setErrorMsg('');
     try {
+      const payload = {
+        role: targetRole === '/teacher' ? 'teacher' : 'student',
+        real_name: realName,
+        id_num: idNum,
+        password: password,
+        college: school,
+        major: targetRole === '/student' ? major : null,
+        grade: targetRole === '/student' ? grade : null
+      };
+
       const response = await fetch('http://localhost:8000/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          username, 
-          password,
-          school,
-          major,
-          grade
-        }),
+        body: JSON.stringify(payload),
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        localStorage.setItem('va_username', username);
-        localStorage.setItem('va_school', school);
-        localStorage.setItem('va_major', major);
-        localStorage.setItem('va_grade', grade);
-        localStorage.setItem('va_token', username); 
+        localStorage.setItem('va_username', idNum);
+        localStorage.setItem('va_realname', realName);
+        localStorage.setItem('va_college', school);
+        localStorage.setItem('va_token', idNum); 
         
-        const finalRole = targetRole === '/teacher' ? 'teacher' : 'student';
+        const finalRole = payload.role;
         localStorage.setItem('va_role', finalRole);
         
         setShowLoginModal(false);
@@ -117,10 +124,6 @@ function Portal() {
         navigate(finalRole === 'teacher' ? '/teacher' : '/student');
       } else {
         setErrorMsg(data.detail || '注册失败，请稍后重试');
-        // 如果注册失败，可能由于用户名冲突等，返回登录/注册初始态
-        if (data.detail && data.detail.includes('注册')) {
-             setShowOnboarding(false);
-        }
       }
     } catch (err) {
       setErrorMsg('提交失败，请检查网络连接');
@@ -247,13 +250,13 @@ function Portal() {
 
                 <form onSubmit={handleAuth} className="space-y-5">
                   <div>
-                    <label className="block text-[13px] font-bold text-slate-500 uppercase tracking-wider mb-2">用户名</label>
+                    <label className="block text-[13px] font-bold text-slate-500 uppercase tracking-wider mb-2">学号 / 工号</label>
                     <input 
                       type="text" 
                       value={username}
                       onChange={e => setUsername(e.target.value)}
                       className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-3.5 text-slate-800 focus:bg-white focus:ring-4 focus:ring-blue-50 focus:border-blue-400 outline-none transition-all placeholder-slate-300 shadow-inner"
-                      placeholder="账号 / 学号"
+                      placeholder="请输入学号或工号"
                     />
                   </div>
                   <div>
@@ -308,52 +311,78 @@ function Portal() {
             ) : (
               // Onboarding 表单
               <div className="animate-in slide-in-from-right-10 duration-500">
-                <div className="text-center mb-8">
-                  <div className="w-14 h-14 rounded-full bg-blue-600 text-white mx-auto flex items-center justify-center mb-6 shadow-xl shadow-blue-200">
-                    <span className="material-symbols-outlined text-3xl">edit_note</span>
+                <div className="text-center mb-10">
+                  <div className="w-16 h-16 rounded-3xl bg-blue-600 text-white mx-auto flex items-center justify-center mb-6 shadow-xl shadow-blue-200">
+                    <span className="material-symbols-outlined text-4xl">edit_note</span>
                   </div>
-                  <h2 className="text-2xl font-black text-slate-900 mb-2">完善参赛资料</h2>
-                  <p className="text-xs text-slate-400">我们需要这些信息来为您匹配合适的商业分析模块</p>
+                  <h2 className="text-2xl font-black text-slate-900 mb-2">完善实名注册信息</h2>
+                  <p className="text-xs text-slate-400">请确保填写的信息与真实证件一致，以便通过成员校验</p>
                 </div>
 
                 <form onSubmit={handleOnboardingSubmit} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 ml-1">真实姓名</label>
+                      <input 
+                        type="text" 
+                        value={realName}
+                        onChange={e => setRealName(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-100 rounded-xl px-5 py-3 text-sm focus:bg-white focus:ring-4 focus:ring-blue-50 focus:border-blue-400 transition-all"
+                        placeholder="姓名"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 ml-1">{targetRole === '/student' ? '学号' : '教师工号'}</label>
+                      <input 
+                        type="text" 
+                        value={idNum}
+                        onChange={e => setIdNum(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-100 rounded-xl px-5 py-3 text-sm focus:bg-white focus:ring-4 focus:ring-blue-50 focus:border-blue-400 transition-all"
+                        placeholder="ID 号"
+                      />
+                    </div>
+                  </div>
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 ml-1">就读学校</label>
+                    <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 ml-1">所属学院</label>
                     <input 
                       type="text" 
                       value={school}
                       onChange={e => setSchool(e.target.value)}
                       className="w-full bg-slate-50 border border-slate-100 rounded-xl px-5 py-3 text-sm focus:bg-white focus:ring-4 focus:ring-blue-50 focus:border-blue-400 transition-all"
-                      placeholder="例如：北京大学"
+                      placeholder="例如：计算机学院"
                     />
                   </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 ml-1">所属专业</label>
-                    <input 
-                      type="text" 
-                      value={major}
-                      onChange={e => setMajor(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-100 rounded-xl px-5 py-3 text-sm focus:bg-white focus:ring-4 focus:ring-blue-50 focus:border-blue-400 transition-all"
-                      placeholder="例如：计算机科学与技术"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 ml-1">当前年级</label>
-                    <select
-                      value={grade}
-                      onChange={e => setGrade(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-100 rounded-xl px-5 py-3 text-sm focus:bg-white focus:ring-4 focus:ring-blue-50 focus:border-blue-400 transition-all appearance-none"
-                    >
-                      <option value="">请选择年级...</option>
-                      <option value="大一">大一</option>
-                      <option value="大二">大二</option>
-                      <option value="大三">大三</option>
-                      <option value="大四">大四</option>
-                      <option value="研一">研一</option>
-                      <option value="研二">研二</option>
-                      <option value="研三">研三</option>
-                    </select>
-                  </div>
+                  {targetRole === '/student' && (
+                    <>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 ml-1">所属专业</label>
+                        <input 
+                          type="text" 
+                          value={major}
+                          onChange={e => setMajor(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-100 rounded-xl px-5 py-3 text-sm focus:bg-white focus:ring-4 focus:ring-blue-50 focus:border-blue-400 transition-all"
+                          placeholder="例如：软件工程"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 ml-1">当前年级</label>
+                        <select
+                          value={grade}
+                          onChange={e => setGrade(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-100 rounded-xl px-5 py-3 text-sm focus:bg-white focus:ring-4 focus:ring-blue-50 focus:border-blue-400 transition-all appearance-none"
+                        >
+                          <option value="">请选择年级...</option>
+                          <option value="大一">大一</option>
+                          <option value="大二">大二</option>
+                          <option value="大三">大三</option>
+                          <option value="大四">大四</option>
+                          <option value="研一">研一</option>
+                          <option value="研二">研二</option>
+                          <option value="研三">研三</option>
+                        </select>
+                      </div>
+                    </>
+                  )}
 
                   {errorMsg && (
                     <div className="text-red-500 text-[11px] font-bold animate-pulse text-center">{errorMsg}</div>
@@ -361,9 +390,10 @@ function Portal() {
 
                   <button 
                     type="submit"
-                    className="w-full py-4 mt-6 rounded-2xl bg-slate-900 text-white font-black text-sm tracking-widest hover:bg-black transition-all shadow-xl active:scale-95"
+                    disabled={isLoading}
+                    className="w-full py-4 mt-6 rounded-2xl bg-slate-900 text-white font-black text-sm tracking-widest hover:bg-black transition-all shadow-xl active:scale-95 disabled:bg-slate-300"
                   >
-                    开 始 体 验
+                    {isLoading ? '提交中...' : '开 始 体 验'}
                   </button>
                 </form>
               </div>
