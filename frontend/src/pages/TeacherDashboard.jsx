@@ -21,7 +21,8 @@ import {
   ProjectOutlined,
   UserOutlined,
   BookOutlined,
-  SyncOutlined
+  SyncOutlined,
+  EditOutlined
 } from '@ant-design/icons';
 
 const { TabPane } = Tabs;
@@ -288,14 +289,9 @@ export default function TeacherDashboard() {
                title="同步最新数据"
              />
              {activeMenu !== 'overview' && (
-               <>
-                 <Button loading={auditLoading} type="primary" onClick={triggerAudit} icon={<RobotOutlined />} className="bg-indigo-600 border-none">
-                    AI 深度审计
-                 </Button>
-                 <Button type="primary" ghost icon={<SendOutlined />} onClick={() => setActiveMenu('intervention')} className="border-emerald-500 text-emerald-600">
-                   下发干预锦囊
-                 </Button>
-               </>
+               <Button loading={auditLoading} type="primary" onClick={triggerAudit} icon={<RobotOutlined />} className="bg-indigo-600 border-none">
+                  AI 重新审计
+               </Button>
              )}
           </div>
         </header>
@@ -321,35 +317,34 @@ export default function TeacherDashboard() {
                 ))}
               </div>
 
-              {/* 核心洞察卡片 (高对比度容器测试) */}
-              <div className="grid grid-cols-3 gap-8">
-                <Card 
-                  title={<span className="text-slate-800"><WarningOutlined className="mr-2 text-rose-500" /> Top 商业逻辑盲区 (H原则冲突)</span>} 
-                  className="col-span-3 border-none shadow-md rounded-2xl bg-white"
-                >
-                  <div className="grid grid-cols-3 gap-4">
-                    {topMistakes.length > 0 ? topMistakes.map((m, i) => (
-                      <div key={i} className="p-5 bg-rose-50 rounded-2xl border border-rose-100 transition-all hover:bg-rose-100">
-                        <div className="flex justify-between items-start mb-2">
-                          <span className="px-2 py-0.5 bg-rose-200 text-rose-700 text-[10px] font-bold rounded-full">{m.name.split(' ')[0]}</span>
-                          <span className="text-rose-400 font-black text-xl">#{i+1}</span>
-                        </div>
-                        <p className="text-sm font-bold text-slate-900 mt-1">{m.name}</p>
-                        <p className="text-xs text-slate-500 mt-2 leading-relaxed">{m.desc}</p>
-                        <div className="mt-4 pt-4 border-t border-rose-200/50 flex items-center justify-between text-[11px] font-bold text-rose-600 uppercase">
-                          <span>波及范围</span>
-                          <span>{m.count} 个项目单元</span>
-                        </div>
+              {/* 核心洞察卡片 */}
+              <Card 
+                title={<span><WarningOutlined className="mr-2 text-rose-500" /> Top 商业逻辑盲区 (H原则冲突)</span>} 
+                className="border-none shadow-md rounded-3xl bg-white"
+              >
+                <div className="grid grid-cols-3 gap-6">
+                  {topMistakes.length > 0 ? topMistakes.map((m, i) => (
+                    <div key={i} className="p-6 bg-rose-50/50 rounded-[24px] border border-rose-100/50 transition-all hover:bg-rose-100/50">
+                      <div className="flex justify-between items-start mb-3">
+                        <span className="px-3 py-1 bg-rose-200 text-rose-700 text-[10px] font-black rounded-full uppercase">{m.name.split(' ')[0]}</span>
+                        <span className="text-rose-300 font-black text-2xl">0{i+1}</span>
                       </div>
-                    )) : <Empty description="暂无共性风险点" />}
-                  </div>
-                </Card>
-              </div>
+                      <p className="text-sm font-black text-slate-800">{m.name}</p>
+                      <p className="text-xs text-slate-500 mt-2 leading-relaxed h-12 overflow-hidden">{m.desc}</p>
+                      <div className="mt-4 pt-4 border-t border-rose-200/30 flex items-center justify-between text-[10px] font-black text-rose-600 uppercase tracking-widest">
+                        <span>波及范围</span>
+                        <span>{m.count} PROJECTS</span>
+                      </div>
+                    </div>
+                  )) : <Empty description="暂无共性风险点" />}
+                </div>
+              </Card>
 
-              <div className="bg-white rounded-2xl shadow-md overflow-hidden border border-slate-100">
-                <div className="px-6 py-4 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
-                  <h3 className="text-slate-800 font-bold m-0">当前名下项目监控清单</h3>
-                  <Button type="link" size="small">刷新数据</Button>
+              {/* 项目清单 */}
+              <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-100 p-2">
+                <div className="px-6 py-4 border-slate-50 flex justify-between items-center">
+                  <h3 className="text-slate-800 font-black m-0 uppercase tracking-tighter">Monitoring Inventory</h3>
+                  <Tag color="blue" className="rounded-full border-none px-3 font-bold">{projects.length} ACTIVE</Tag>
                 </div>
                 <Table 
                   dataSource={projects} 
@@ -364,103 +359,131 @@ export default function TeacherDashboard() {
           ) : (
             /* 项目详情辅导视角 */
             <div className="animate-in slide-in-from-bottom-6 duration-500 space-y-8">
-              
               <div className="grid grid-cols-12 gap-8">
                 
-                {/* 评分看板 */}
-                <div className="col-span-4 space-y-6">
-                  <Card title="R1-R9 专业打分分布" className="border-none shadow-sm rounded-2xl">
-                    <div className="mb-6 pt-2">
-                       <RadarChart data={projectDetail?.assessment} />
-                    </div>
-                    <div className="space-y-4">
-                      {[
-                        { label: 'R1 创新性', score: projectDetail?.assessment?.r1_score },
-                        { label: 'R2 证据可靠度', score: projectDetail?.assessment?.r2_score },
-                        { label: 'R8 盈利能力', score: projectDetail?.assessment?.r8_score },
-                        { label: 'R9 团队背景', score: projectDetail?.assessment?.r9_score }
-                      ].map((r, i) => (
-                        <div key={i} className="flex flex-col">
-                          <div className="flex justify-between text-xs mb-1 font-bold text-slate-500">
-                            <span>{r.label}</span>
-                            <span className="text-slate-900">{r.score?.toFixed(1) || '0.0'}</span>
-                          </div>
-                          <Progress percent={(r.score || 0) * 20} strokeColor={r.score >= 4 ? '#10b981' : r.score >= 2 ? '#f59e0b' : '#ef4444'} showInfo={false} />
+                {/* 核心整合：全景评估中心 */}
+                <div className="col-span-12">
+                  <Card className="border-none shadow-xl rounded-[40px] overflow-hidden bg-white p-2">
+                    <div className="grid grid-cols-12 gap-0">
+                      {/* 左侧：多维雷达与风险定级 */}
+                      <div className="col-span-4 border-r border-slate-100 p-10 flex flex-col items-center justify-center bg-slate-50/50 rounded-l-[32px]">
+                        <h4 className="text-slate-400 text-[10px] font-black uppercase tracking-[0.3em] mb-10">Matrix Analysis</h4>
+                        <div className="relative">
+                           <RadarChart data={projectDetail?.assessment} />
+                           <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                              <div className="mt-32">
+                                <Tag color={projectDetail?.assessment?.overall_risk === 'High' ? 'red' : 'orange'} className="px-6 py-2 text-sm font-black rounded-full border-none shadow-xl scale-110">
+                                  {projectDetail?.assessment?.overall_risk || 'PENDING'} RISK
+                                </Tag>
+                              </div>
+                           </div>
                         </div>
-                      ))}
-                    </div>
-                  </Card>
+                        <p className="mt-12 text-[10px] text-slate-400 font-black uppercase tracking-widest text-center">R1-R9 Structural Model</p>
+                      </div>
 
-                  <Card title="项目核心风险画像 (R1-R9 评估)" className="border-none shadow-sm rounded-2xl overflow-hidden">
-                     <div className="flex flex-col items-center justify-center p-4">
-                        <RadarChart data={{
-                          r1: projectDetail?.assessment?.r1_score,
-                          r2: projectDetail?.assessment?.r2_score,
-                          r3: projectDetail?.assessment?.r3_score,
-                          r4: projectDetail?.assessment?.r4_score,
-                          r5: projectDetail?.assessment?.r5_score,
-                          r6: projectDetail?.assessment?.r6_score,
-                          r7: projectDetail?.assessment?.r7_score,
-                          r8: projectDetail?.assessment?.r8_score,
-                          r9: projectDetail?.assessment?.r9_score
-                        }} />
-                        <div className="mt-6">
-                          <Tag color="red" className="px-6 py-2 text-xl font-bold rounded-2xl border-none shadow-lg">
-                            {projectDetail?.assessment?.overall_risk || '评估中'} 风险
-                          </Tag>
+                      {/* 中间：细分维度评分 */}
+                      <div className="col-span-3 p-10 flex flex-col justify-center border-r border-slate-100">
+                        <h4 className="text-slate-800 text-sm font-black mb-8 flex items-center gap-2">
+                          <LineChartOutlined className="text-emerald-500" /> 维度透视
+                        </h4>
+                        <div className="space-y-6">
+                          {[
+                            { label: 'R1 创新性', key: 'r1_score' },
+                            { label: 'R2 可靠度', key: 'r2_score' },
+                            { label: 'R8 盈利力', key: 'r8_score' },
+                            { label: 'R9 团队力', key: 'r9_score' }
+                          ].map((r, i) => {
+                            const val = projectDetail?.assessment?.[r.key] || 0;
+                            return (
+                              <div key={i} className="flex flex-col">
+                                <div className="flex justify-between text-[11px] mb-2 font-black text-slate-500 uppercase tracking-tighter">
+                                  <span>{r.label}</span>
+                                  <span className="text-slate-900">{val.toFixed(1)}</span>
+                                </div>
+                                <Progress percent={val * 20} strokeColor={val >= 4 ? '#10b981' : val >= 2.5 ? '#f59e0b' : '#ef4444'} showInfo={false} strokeWidth={8} className="rounded-full" />
+                              </div>
+                            );
+                          })}
                         </div>
-                     </div>
-                     <p className="text-center text-[10px] text-slate-400 mt-2 uppercase tracking-widest font-black">AI 自动定级结论</p>
+                      </div>
+
+                      {/* 右侧：导师专线审计报告 */}
+                      <div className="col-span-5 p-10 bg-slate-900 text-white rounded-r-[32px] relative overflow-hidden flex flex-col">
+                        <RobotOutlined className="absolute -right-10 -bottom-10 text-white/5 text-[240px] transform rotate-12" />
+                        <div className="relative z-10 flex flex-col h-full">
+                          <div className="flex justify-between items-start mb-8">
+                            <h4 className="text-emerald-400 text-xs font-black uppercase tracking-widest flex items-center gap-2">
+                              <AuditOutlined /> Instructor-Only Expert Audit
+                            </h4>
+                            <div className="flex items-center gap-2 px-3 py-1 bg-white/10 rounded-full border border-white/10">
+                              <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
+                              <span className="text-[9px] font-black uppercase tracking-tighter text-emerald-400">DeepSeek Core</span>
+                            </div>
+                          </div>
+                          
+                          <div className="flex-1 bg-white/5 rounded-3xl p-8 border border-white/10 backdrop-blur-sm relative mb-6">
+                             <div className="text-lg leading-relaxed font-semibold text-slate-100 italic">
+                               "{projectDetail?.assessment?.audit_summary || '暂无深度审计报告。作为指导老师，您可以点击下方按钮启动 Agent 对项目底层逻辑的穿透式审计。评分与报告将基于 H 原则与 R 体系自动生成。'}"
+                             </div>
+                             <div className="absolute top-4 right-6 text-4xl text-white/10 opacity-50 font-serif">“</div>
+                          </div>
+
+                          <div className="pt-6 border-t border-white/5 flex items-center justify-between">
+                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest m-0">Generated by Venture Agent V4.9</p>
+                            <Button type="primary" size="large" onClick={triggerAudit} loading={auditLoading} className="bg-emerald-600 hover:bg-emerald-500 border-none font-black text-xs h-12 px-8 rounded-2xl shadow-xl shadow-emerald-500/20">
+                              EXECUTE RE-AUDIT
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </Card>
                 </div>
 
-                {/* 辅导建议与干预 */}
-                <div className="col-span-8 space-y-6">
-                  <div className="bg-slate-800 p-8 rounded-3xl text-white shadow-2xl relative overflow-hidden">
-                    <RobotOutlined className="absolute -right-4 -bottom-4 text-white/5 text-9xl transform -rotate-12" />
-                    <h3 className="text-emerald-400 font-bold mb-4 flex items-center gap-2 text-lg">
-                       <ThunderboltOutlined /> 当前项目底层审计报告 (H原则检索)
-                    </h3>
-                    <div className="text-lg leading-relaxed font-medium italic text-slate-100">
-                      "{projectDetail?.assessment?.audit_summary || '暂无详细审计报告，请引导学生完善文档。'}"
-                    </div>
+                {/* 辅导互动区 */}
+                <div className="col-span-12 grid grid-cols-12 gap-8 mt-8">
+                  <div className="col-span-7">
+                    <Card title={<span className="text-slate-800 font-black uppercase tracking-tight"><ThunderboltOutlined className="mr-2 text-indigo-500" /> Historical Battle Logs</span>} className="border-none shadow-xl rounded-[40px] h-full p-2">
+                       <div className="space-y-4 max-h-[500px] overflow-y-auto custom-scrollbar pr-4">
+                          {projectDetail?.battle_logs?.length > 0 ? projectDetail.battle_logs.map((log, idx) => (
+                            <div key={idx} className={`p-6 rounded-[24px] text-sm relative overflow-hidden ${log.role === 'user' ? 'bg-slate-50 border border-slate-100' : 'bg-emerald-50/30 border border-emerald-100/50'}`}>
+                               <div className="relative z-10">
+                                 <p className="text-[9px] font-black uppercase opacity-40 mb-3 tracking-[0.2em]">{log.role === 'user' ? 'Student Inquiry' : 'Agent Diagnosis'}</p>
+                                 <div className="text-slate-800 leading-relaxed font-bold text-base">{log.text}</div>
+                               </div>
+                            </div>
+                          )) : <Empty className="py-20" description="暂无对话博弈记录" />}
+                       </div>
+                    </Card>
                   </div>
-
-                  <Card title="指导师博弈追踪 (最近互动)" className="border-none shadow-sm rounded-2xl">
-                     <div className="space-y-4">
-                        {projectDetail?.battle_logs?.length > 0 ? projectDetail.battle_logs.map((log, idx) => (
-                          <div key={idx} className={`p-4 rounded-2xl text-sm ${log.role === 'user' ? 'bg-slate-100 border border-slate-200' : 'bg-emerald-50 border border-emerald-100'}`}>
-                             <p className="text-[10px] font-bold uppercase opacity-50 mb-1">{log.role === 'user' ? '学生提问' : 'Agent 诊断'}</p>
-                             <div className="text-slate-800 leading-relaxed font-semibold">{log.text}</div>
-                          </div>
-                        )) : <Empty description="暂无对话记录" />}
-                     </div>
-                  </Card>
-
-                  {/* 干预快捷入口 */}
-                  <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-xl overflow-hidden">
-                    <div className="flex items-center gap-2 mb-6">
-                       <Avatar src={`https://api.dicebear.com/7.x/identicon/svg?seed=admin`} />
-                       <h3 className="text-slate-900 font-black m-0 text-xl uppercase tracking-tighter">Teaching Intervention Center</h3>
-                    </div>
-                    <TextArea 
-                      rows={4} 
-                      value={interventionText}
-                      onChange={e => setInterventionText(e.target.value)}
-                      placeholder="点此输入辅导指令。例如：要求项目组针对本月竞品融资情况补充防御策略..."
-                      className="bg-slate-50 border-slate-200 text-slate-900 rounded-2xl focus:ring-emerald-500 text-base"
-                    />
-                    <div className="mt-6 flex justify-between items-center">
-                      <p className="text-xs text-slate-400 max-w-md">
-                        * 锦囊说明：内容将被即时注入学生端的 System Prompt。Agent 将会在下一次对话中以隐性方式引导学生思考。
-                      </p>
-                      <Button type="primary" size="large" icon={<SendOutlined />} onClick={handleSendIntervention} className="bg-emerald-600 border-none rounded-2xl h-12 px-10 font-bold shadow-lg shadow-emerald-500/20">
-                        下发锦囊
-                      </Button>
+                  
+                  <div className="col-span-5">
+                    <div className="bg-white p-10 rounded-[48px] border border-slate-200 shadow-2xl h-full flex flex-col relative overflow-hidden group">
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 blur-[60px] rounded-full group-hover:bg-emerald-500/10 transition-all duration-1000"></div>
+                      <div className="flex items-center gap-4 mb-8">
+                         <div className="w-14 h-14 bg-indigo-50 rounded-3xl flex items-center justify-center">
+                            <EditOutlined className="text-indigo-600 text-2xl" />
+                         </div>
+                         <div>
+                            <h3 className="text-slate-900 font-black m-0 text-2xl uppercase tracking-tighter">Teaching Intervention</h3>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">下发指令同步至学生端 Agent</p>
+                         </div>
+                      </div>
+                      <TextArea 
+                        rows={8} 
+                        value={interventionText}
+                        onChange={e => setInterventionText(e.target.value)}
+                        placeholder="请输入您的指导建议。例如：强制要求项目组在本周内完成目标用户的访谈，并提交 H 原则下的价值主张偏差报告..."
+                        className="bg-slate-50/50 border-none text-slate-900 rounded-[32px] focus:ring-emerald-500 text-lg p-8 flex-1 placeholder:text-slate-300 shadow-inner"
+                      />
+                      <div className="mt-10">
+                        <Button type="primary" size="large" block icon={<SendOutlined />} onClick={handleSendIntervention} className="bg-slate-900 hover:bg-emerald-600 border-none rounded-[24px] h-20 font-black text-lg shadow-2xl shadow-indigo-500/20 transition-all active:scale-95">
+                          ACTIVATE INSTRUCTION
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </div>
-
               </div>
             </div>
           )}
@@ -474,12 +497,6 @@ export default function TeacherDashboard() {
       />
 
       <style dangerouslySetInnerHTML={{__html: `
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
-        .ant-table { background: white !important; }
-        .ant-table-thead > tr > th { background: #f8fafc !important; color: #64748b !important; border-bottom: 2px solid #f1f5f9 !important; text-transform: uppercase; font-size: 11px; }
-        .ant-table-tbody > tr > td { border-bottom: 1px solid #f1f5f9 !important; transition: all 0.3s; }
-        .ant-table-tbody > tr:hover > td { background: #f8fafc !important; }
         .ant-card-head { border-bottom: 1px solid #f1f5f9 !important; min-height: 56px; }
         .ant-card-head-title { font-weight: 800; color: #1e293b; font-size: 15px; }
         .ant-progress-inner { background-color: #f1f5f9 !important; }

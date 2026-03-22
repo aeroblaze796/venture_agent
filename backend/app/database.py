@@ -106,7 +106,7 @@ def init_db():
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS project_assessments (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        project_id INTEGER,
+        project_id INTEGER UNIQUE,
         r1_score REAL, r2_score REAL, r3_score REAL, r4_score REAL, r5_score REAL, 
         r6_score REAL, r7_score REAL, r8_score REAL, r9_score REAL,
         overall_risk TEXT,
