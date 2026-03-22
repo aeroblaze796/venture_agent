@@ -737,7 +737,40 @@ def admin_get_projects():
     """
     cursor.execute(query)
     projects = [dict(row) for row in cursor.fetchall()]
+    conn.close()
     return projects
+
+@app.get("/api/admin/sqlite/tables")
+def admin_get_sqlite_tables():
+    """获取 SQLite 数据库中所有的表名"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+    tables = [row[0] for row in cursor.fetchall()]
+    conn.close()
+    return tables
+
+@app.get("/api/admin/sqlite/data/{table_name}")
+def admin_get_sqlite_data(table_name: str):
+    """获取指定表的数据预览 (前 100 条)"""
+    # 简单的安全过滤，防止 SQL 注入
+    if not table_name.isalnum() and "_" not in table_name:
+        raise HTTPException(status_code=400, detail="Invalid table name")
+        
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    try:
+        cursor.execute(f"SELECT * FROM {table_name} LIMIT 100")
+        rows = [dict(r) for r in cursor.fetchall()]
+        # 获取列定义信息
+        cursor.execute(f"PRAGMA table_info({table_name})")
+        columns = [{"title": col[1], "key": col[1], "dataIndex": col[1]} for col in cursor.fetchall()]
+        return {"columns": columns, "data": rows}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
 
 if __name__ == "__main__":
     import uvicorn

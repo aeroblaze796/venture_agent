@@ -21,13 +21,26 @@ const AdminMatrix = () => {
   const [stats, setStats] = useState({ project_count: 0, user_count: 0, file_count: 0, college_distribution: {} });
   const [projects, setProjects] = useState([]);
   const [users, setUsers] = useState([]);
+  const [sqliteTables, setSqliteTables] = useState([]);
+  const [selectedTable, setSelectedTable] = useState(null);
+  const [tableData, setTableData] = useState({ columns: [], data: [] });
+  const [sqliteLoading, setSqliteLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    fetchStats();
-    fetchProjects();
-    fetchUsers();
-  }, []);
+    if (activeTab === 'dashboard') {
+      fetchStats();
+    }
+    if (activeTab === 'projects') {
+      fetchProjects();
+    }
+    if (activeTab === 'users') {
+      fetchUsers();
+    }
+    if (activeTab === 'sqlite') {
+      fetchSqliteTables();
+    }
+  }, [activeTab]);
 
   const fetchStats = async () => {
     try {
@@ -68,6 +81,31 @@ const AdminMatrix = () => {
     } catch (e) {
       console.error("Fetch users failed:", e);
     }
+  };
+
+  const fetchSqliteTables = async () => {
+    try {
+      const res = await fetch('http://localhost:8000/api/admin/sqlite/tables');
+      if (res.ok) {
+        const tables = await res.json();
+        setSqliteTables(tables);
+        if (tables.length > 0 && !selectedTable) {
+          handleTableSelect(tables[0]);
+        }
+      }
+    } catch (e) { console.error(e); }
+  };
+
+  const handleTableSelect = async (tableName) => {
+    setSelectedTable(tableName);
+    setSqliteLoading(true);
+    try {
+      const res = await fetch(`http://localhost:8000/api/admin/sqlite/data/${tableName}`);
+      if (res.ok) {
+        setTableData(await res.json());
+      }
+    } catch (e) { console.error(e); }
+    setSqliteLoading(false);
   };
 
   const handleLogout = () => {
@@ -270,16 +308,58 @@ const AdminMatrix = () => {
           )}
 
           {activeTab === 'sqlite' && (
-            <div className="h-full flex flex-col items-center justify-center p-20 animate-in zoom-in-95 duration-500">
-               <div className="w-24 h-24 bg-white rounded-[32px] shadow-xl border border-indigo-50 flex items-center justify-center text-5xl mb-8"><DatabaseOutlined className="text-indigo-200" /></div>
-               <h2 className="text-2xl font-black text-slate-800 mb-4">SQLite 核心状态机验证</h2>
-               <p className="text-slate-400 text-center max-w-lg mb-10 font-medium">当前系统正在校验物理文件与数据库记录的一致性。所有项目附件均已按照物理路径映射至 `uploads/` 目录。</p>
-               <Descriptions bordered column={1} className="w-full max-w-xl bg-white rounded-3xl overflow-hidden admin-desc">
-                  <Descriptions.Item label={<span className="text-xs font-black uppercase text-slate-400 tracking-widest">Database Engine</span>}>SQLite 3.x</Descriptions.Item>
-                  <Descriptions.Item label={<span className="text-xs font-black uppercase text-slate-400 tracking-widest">Storage Status</span>}>Mounted (Read/Write)</Descriptions.Item>
-                  <Descriptions.Item label={<span className="text-xs font-black uppercase text-slate-400 tracking-widest">Migration Level</span>}>v1.2.4 (Attachment Cleanup Patched)</Descriptions.Item>
-                  <Descriptions.Item label={<span className="text-xs font-black uppercase text-slate-400 tracking-widest">Cache Integrity</span>}><Tag color="green">PASSED</Tag></Descriptions.Item>
-               </Descriptions>
+            <div className="animate-in fade-in slide-in-from-bottom-5 duration-500">
+               <Row gutter={24}>
+                  <Col span={6}>
+                    <Card className="rounded-[40px] border-none shadow-2xl shadow-indigo-500/10 p-6 h-[calc(100vh-160px)] flex flex-col">
+                       <h3 className="text-sm font-black text-slate-700 uppercase tracking-widest mb-6 px-4 flex items-center gap-2">
+                          <DatabaseOutlined className="text-emerald-500" /> 数据库表清单
+                       </h3>
+                       <div className="flex-1 overflow-auto space-y-2 pr-2">
+                          {sqliteTables.map(name => (
+                             <div 
+                                key={name}
+                                onClick={() => handleTableSelect(name)}
+                                className={`p-4 rounded-3xl cursor-pointer transition-all border-2 ${
+                                   selectedTable === name 
+                                   ? 'bg-indigo-600 border-indigo-600 text-white shadow-xl shadow-indigo-200' 
+                                   : 'bg-slate-50 border-transparent hover:border-indigo-100 text-slate-600'
+                                }`}
+                             >
+                                <div className="flex items-center justify-between">
+                                   <span className="font-mono text-xs font-bold">{name}</span>
+                                   {selectedTable === name && <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />}
+                                </div>
+                             </div>
+                          ))}
+                       </div>
+                    </Card>
+                  </Col>
+                  <Col span={18}>
+                    <Card className="rounded-[40px] border-none shadow-2xl shadow-indigo-500/10 p-6 h-[calc(100vh-160px)] flex flex-col overflow-hidden">
+                       <div className="flex justify-between items-center mb-6 px-4">
+                          <div className="flex items-center gap-3">
+                             <div className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-black uppercase tracking-widest">Table Preview</div>
+                             <h3 className="text-xl font-black text-slate-800 m-0">{selectedTable || '请选择表'}</h3>
+                          </div>
+                          <Tag color="cyan" className="rounded-full px-4 border-none font-bold uppercase tracking-tighter">Read Only</Tag>
+                       </div>
+                       <div className="flex-1 overflow-auto rounded-3xl border border-slate-50 bg-[#fcfdfe]">
+                          <Table 
+                             columns={tableData.columns}
+                             dataSource={tableData.data}
+                             loading={sqliteLoading}
+                             pagination={false}
+                             size="small"
+                             className="lofty-table-static"
+                             rowKey={(record, index) => index}
+                             scroll={{ x: 'max-content' }}
+                             bordered
+                          />
+                       </div>
+                    </Card>
+                  </Col>
+               </Row>
             </div>
           )}
         </Content>
