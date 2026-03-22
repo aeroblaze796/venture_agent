@@ -182,9 +182,10 @@ const StudentWorkspace = () => {
       
       if (isProjectChanged) {
         // 仅在切换项目时重置
-        if (proj) setEditorContent(proj.content || "");
+        setEditorContent(proj?.content || "");
         setActiveFileId(null);
         setActiveFileUrl(null);
+        setProjectFiles([]);
         fetchProjectFiles(activeProjectId);
         prevProjectIdRef.current = activeProjectId;
       } else if (!activeFileId) {
@@ -300,7 +301,21 @@ const StudentWorkspace = () => {
   const handleDeleteFile = async (fileId, fileUrl) => {
     try {
       await fetch(`http://localhost:8000/api/project-files/${fileId}`, { method: 'DELETE' });
-      if (activeFileUrl === fileUrl) setActiveFileUrl(null);
+      const wasActive = activeFileId === fileId;
+      if (wasActive) {
+        setActiveFileId(null);
+        setActiveFileUrl(null);
+      } else if (activeFileUrl === fileUrl) {
+        setActiveFileUrl(null);
+      }
+      // 先拉取最新文件列表，再刷大盘同步内容
+      if (activeProjectId) await fetchProjectFiles(activeProjectId);
+      await fetchDashboardData();
+      
+      if (wasActive) {
+        const proj = (syncData.projects || []).find(p => p.id === activeProjectId);
+        setEditorContent(proj?.content || "");
+      }
       await fetchDashboardData();
       message.success('附件已删除');
     } catch (_e) { message.error('删除失败'); }
@@ -357,13 +372,14 @@ const StudentWorkspace = () => {
       const data = await res.json();
       hide();
       if (data.text) {
-        setEditorContent(data.text);
-        if (data.file_url) setActiveFileUrl(data.file_url);
+        // 先设 ID 防止 Effect 误覆盖内容
         if (activeProjectId) {
+          setActiveFileId(data.file_id || null);
           await fetchProjectFiles(activeProjectId);
           await fetchDashboardData();
-          setActiveFileId(data.file_id || null);
         }
+        setEditorContent(data.text);
+        if (data.file_url) setActiveFileUrl(data.file_url);
         setActivePage('editor');
         setShowImportModal(false);
         message.success(`解析并导入成功: ${data.filename}`);
@@ -696,7 +712,7 @@ const StudentWorkspace = () => {
                 </div>
               </header>
               <div className="flex-1 p-10">
-                {(activeProjectId || editorContent) ? (
+                {activeProjectId ? (
                   <div className={`mx-auto space-y-8 animate-slide-up transition-all ${activeFileUrl ? 'max-w-[1600px] w-full px-2' : 'max-w-5xl'}`}>
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
                       <div onClick={() => setShowLogModal(true)} className="group p-6 rounded-3xl bg-white border border-slate-100 hover:border-purple-200 hover:bg-purple-50/30 shadow-sm hover:shadow-xl hover:shadow-purple-100 transition-all cursor-pointer flex flex-col gap-4">
@@ -815,7 +831,7 @@ const StudentWorkspace = () => {
                   <div className="col-span-2 bg-white rounded-[40px] p-8 border border-slate-100 shadow-xl shadow-slate-200/20 space-y-6">
                     <h3 className="text-sm font-black text-slate-700 uppercase tracking-widest flex items-center gap-2 mb-4"><GlobalOutlined className="text-blue-500" /> 团队核心名片墙</h3>
                     <div className="grid grid-cols-2 gap-4">
-                      {(syncData.members || []).filter(m => !activeProjectId || m.project_id === activeProjectId).map((member, idx) => (
+                      {(syncData.members || []).filter(m => activeProjectId && m.project_id === activeProjectId).map((member, idx) => (
                         <div key={idx} className={`flex items-center gap-4 p-5 rounded-[32px] border transition-all ${member.role === 'Advisor' ? 'bg-slate-900 border-slate-950 text-white shadow-lg' : 'bg-slate-50 border-slate-100 hover:border-blue-200 hover:bg-white'}`}>
                           <Avatar size={50} src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${member.name}`} className="shadow-sm" />
                           <div className="flex-1 min-w-0">
@@ -824,7 +840,7 @@ const StudentWorkspace = () => {
                           </div>
                         </div>
                       ))}
-                      {(syncData.members || []).filter(m => !activeProjectId || m.project_id === activeProjectId).length === 0 && <div className="col-span-2 py-10 text-center text-slate-300 font-bold uppercase tracking-widest text-xs">暂无团队成员数据</div>}
+                      {(syncData.members || []).filter(m => activeProjectId && m.project_id === activeProjectId).length === 0 && <div className="col-span-2 py-10 text-center text-slate-300 font-bold uppercase tracking-widest text-xs">暂无团队成员数据</div>}
                     </div>
                   </div>
 
@@ -862,7 +878,7 @@ const StudentWorkspace = () => {
               <div className="console-card animate-slide-in">
                 <h3 className="text-[12px] font-black text-slate-700 uppercase mb-5 tracking-widest flex items-center gap-2"><CalendarOutlined className="text-blue-500" /> 全局项目 DDL</h3>
                 <div className="space-y-3">
-                  {(syncData.deadlines || []).slice(0, 4).map((d, i) => (
+                  {(syncData.deadlines || []).filter(d => activeProjectId && (d.project_id === activeProjectId)).slice(0, 4).map((d, i) => (
                     <div key={i} className="p-4 bg-white rounded-2xl border border-slate-100 flex items-center gap-4 hover:shadow-lg transition-all cursor-default">
                       <div className={`w-1.5 h-12 rounded-full ${d.title?.includes('立项') ? 'bg-blue-400' : d.title?.includes('截止') ? 'bg-rose-400' : 'bg-amber-400'}`}></div>
                       <div className="flex-1 min-w-0">
@@ -882,7 +898,7 @@ const StudentWorkspace = () => {
                 <h3 className="text-[12px] font-black text-slate-700 uppercase mb-4 tracking-widest flex items-center gap-2"><HistoryOutlined className="text-purple-500" /> 最近演进记录</h3>
                 <div className="max-h-60 overflow-y-auto pr-2 custom-scrollbar">
                   <Timeline size="small" className="tiny-timeline antique-timeline">
-                    {[...(syncData.evolution_logs || []), ...(syncData.commits || []).map(c => ({ event: `提交更新: ${c.content?.slice(0, 15)}...`, timestamp: c.timestamp }))]
+                    {[...(syncData.evolution_logs || []).filter(l => activeProjectId && l.project_id === activeProjectId), ...(syncData.commits || []).filter(c => activeProjectId && c.project_id === activeProjectId).map(c => ({ event: `提交更新: ${c.content?.slice(0, 15)}...`, timestamp: c.timestamp }))]
                       .sort((a, b) => dayjs(b.timestamp).unix() - dayjs(a.timestamp).unix()).slice(0, 10).map((l, i) => (
                         <Timeline.Item key={i} color={l.event?.includes('提交') ? 'purple' : 'blue'}><div className="flex flex-col gap-0.5"><span className="text-[10px] text-slate-500 font-bold leading-tight">{l.event}</span><span className="text-[8px] text-slate-300 font-black">{dayjs(l.timestamp).format('MM-DD HH:mm')}</span></div></Timeline.Item>
                       ))}
@@ -898,7 +914,7 @@ const StudentWorkspace = () => {
                   <Button onClick={handleEditMembers} size="small" type="text" icon={<EditOutlined className="text-indigo-600" />} className="bg-indigo-50/50 hover:bg-indigo-100 rounded-lg text-[10px] font-black">管理</Button>
                 </div>
                 <div className="space-y-3.5">
-                  {(syncData.members || []).filter(m => !activeProjectId || m.project_id === activeProjectId).map((member, idx) => (
+                  {(syncData.members || []).filter(m => activeProjectId && m.project_id === activeProjectId).map((member, idx) => (
                     <Popover key={idx} trigger="click" placement="left" title={<span className="font-black text-sm">组织架构深度透视</span>} content={<div className="w-72 space-y-4 p-2"><div className="flex flex-col gap-2 p-4 bg-indigo-50/50 rounded-[24px] border border-indigo-100/50"><div className="flex justify-between items-center"><span className="text-[10px] font-black text-indigo-400 uppercase">学号 / 代码</span><span className="text-[11px] font-bold text-indigo-600">{member.student_id || '---'}</span></div><div className="flex justify-between items-center"><span className="text-[10px] font-black text-indigo-400 uppercase">所属组织</span><span className="text-[11px] font-bold text-indigo-600">{member.college || '---'}</span></div><div className="flex justify-between items-center"><span className="text-[10px] font-black text-indigo-400 uppercase">专业 Major</span><span className="text-[11px] font-bold text-indigo-600">{member.major || '---'}</span></div><div className="flex justify-between items-center"><span className="text-[10px] font-black text-indigo-400 uppercase">年级 Grade</span><span className="text-[11px] font-bold text-indigo-600">{member.grade || '---'}</span></div></div><div className="p-4 bg-slate-50 rounded-[24px] border border-slate-100"><p className="text-[10px] font-black text-slate-400 uppercase mb-2">核心职责 Position</p><p className="text-[12px] text-slate-600 font-bold m-0">{member.position || '暂未分配具体任务'}</p></div></div>}>
                       <div className={`flex items-center gap-4 p-4 rounded-[28px] border transition-all cursor-pointer group ${member.role === 'Advisor' ? 'bg-indigo-900 border-indigo-950 text-white shadow-lg shadow-indigo-100' : 'bg-white border-slate-100 hover:border-indigo-100 hover:shadow-xl hover:shadow-indigo-500/5'}`}>
                         <Avatar size={48} className={`shadow-sm group-hover:scale-105 transition-transform ${member.role === 'Advisor' ? 'bg-indigo-500 text-white' : 'bg-slate-50 text-slate-300'}`} icon={member.role === 'Advisor' ? <RobotOutlined /> : <UserOutlined />} />
@@ -906,7 +922,7 @@ const StudentWorkspace = () => {
                       </div>
                     </Popover>
                   ))}
-                  {(syncData.members || []).filter(m => !activeProjectId || m.project_id === activeProjectId).length === 0 && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={<span className="text-[10px] text-slate-300 font-bold">No Members</span>} />}
+                  {(syncData.members || []).filter(m => activeProjectId && m.project_id === activeProjectId).length === 0 && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={<span className="text-[10px] text-slate-300 font-bold">No Members</span>} />}
                 </div>
               </div>
               <div className="console-card animate-slide-in" style={{ animationDelay: '0.1s' }}>
