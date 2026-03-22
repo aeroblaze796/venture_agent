@@ -145,7 +145,12 @@ const StudentWorkspace = () => {
 
   const fetchDashboardData = async () => {
     setLoading(true);
-    const username = localStorage.getItem("va_username") || "1120230571";
+    const username = localStorage.getItem("va_username");
+    if (!username) {
+      console.warn("No va_username found in localStorage. Skipping fetch.");
+      setLoading(false);
+      return;
+    }
     try {
       const res = await fetch(`http://localhost:8000/api/sync/dashboard?user_id=${username}`);
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
@@ -160,6 +165,7 @@ const StudentWorkspace = () => {
       }
     } catch (e) {
       console.error("fetchDashboardData failed:", e);
+      message.error("同步数据失败，请检查网络或重新登录。");
     } finally {
       setLoading(false);
     }
@@ -167,7 +173,8 @@ const StudentWorkspace = () => {
 
   useEffect(() => {
     const initData = async () => {
-      const username = localStorage.getItem("va_username") || "1120230571";
+      const username = localStorage.getItem("va_username");
+      if (!username) return;
       try {
         await fetchDashboardData();
         const res = await fetch(`http://localhost:8000/api/conversations?user_id=${username}`);
@@ -446,7 +453,7 @@ const StudentWorkspace = () => {
     try {
       const resp = await fetch('http://localhost:8000/api/projects', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...projectForm, content: editorContent, owner_id: localStorage.getItem('va_username') || '1120230571' })
+        body: JSON.stringify({ ...projectForm, content: editorContent, owner_id: localStorage.getItem('va_username') })
       });
       if (resp.ok) {
         const result = await resp.json();
@@ -490,6 +497,8 @@ const StudentWorkspace = () => {
       const res = await fetch(`http://localhost:8000/api/projects/${id}`, { method: 'DELETE' });
       if (res.ok) {
         if (activeProjectId === id) { setActiveProjectId(null); setEditorContent(""); }
+        // 瞬间乐观更新本地状态，防止“连坐删除”视觉延迟
+        setSyncData(prev => ({ ...prev, projects: (prev.projects || []).filter(p => p.id !== id) }));
         await fetchDashboardData();
         message.success("项目已删除。");
       }

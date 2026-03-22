@@ -83,6 +83,7 @@ class MemberInfo(BaseModel):
     info: Optional[str] = None
 
 class ProjectCreateRequest(BaseModel):
+    id: Optional[int] = None  # 用于区分更新操作
     name: str
     owner_id: str
     competition: Optional[str] = "互联网+"
@@ -93,6 +94,45 @@ class ProjectCreateRequest(BaseModel):
     advisorInfo: Optional[str] = None
     content: Optional[str] = ""
     members: List[MemberInfo] = []
+
+# --- Helper Logic ---
+
+def verify_project_members(project: ProjectCreateRequest):
+    """通用校验逻辑：验证负责人、指导老师及团队成员在 Neo4j 中的实名状态"""
+    # 1. 组长约束判定
+    has_leader = any(m.role in ['Leader', '组长', '队长'] for m in project.members)
+    if not has_leader:
+        raise HTTPException(status_code=400, detail="项目必须包含至少一名组长（Leader/组长）")
+
+    # 2. 指导老师实名核验 (Neo4j)
+    if project.advisorName:
+        verify_advisor_q = """
+            MATCH (u:User {role: 'teacher', real_name: $name, username: $id, college: $college}) 
+            RETURN u
+        """
+        advisor_res = db.execute_query(verify_advisor_q, {
+            "name": project.advisorName, 
+            "id": project.advisorId, 
+            "college": project.college
+        })
+        if not advisor_res:
+            raise HTTPException(status_code=400, detail=f"指导老师校验失败：无法在系统中找到名为 {project.advisorName}、工号为 {project.advisorId} 且属于 {project.college} 的已注册教师。")
+
+    # 3. 团队成员实名核验 (Neo4j)
+    for m in project.members:
+        verify_member_q = """
+            MATCH (u:User {role: 'student', real_name: $name, username: $id, college: $college, major: $major, grade: $grade}) 
+            RETURN u
+        """
+        member_res = db.execute_query(verify_member_q, {
+            "name": m.name,
+            "id": m.student_id,
+            "college": m.college or project.college,
+            "major": m.major,
+            "grade": m.grade
+        })
+        if not member_res:
+            raise HTTPException(status_code=400, detail=f"成员校验失败：名为 {m.name}、学号为 {m.student_id} 的同学未注册或填写的学院专业年级信息有误。")
 
 class CommitRequest(BaseModel):
     content: str
@@ -114,9 +154,9 @@ def on_startup():
     # 注入 Mock 教师用户到账户库 (方便用户直接登录测试)
     from app.ingestion.db_config import db
     try:
-        # 使用 MERGE 确认 Mock 教师 ID
-        db.execute_query("MERGE (u:User {username: '张老师'}) SET u.password = '123456', u.role = 'teacher', u.teacher_id = 'T001'")
-        db.execute_query("MERGE (u:User {username: '王老师'}) SET u.password = '123456', u.role = 'teacher', u.teacher_id = 'T002'")
+        # 使用 MERGE 确认 Mock 教师属性对齐：username 为工号，real_name 为真实姓名
+        db.execute_query("MERGE (u:User {username: 'T001'}) SET u.password = '123456', u.role = 'teacher', u.real_name = '张老师', u.college = '智慧双创学院'")
+        db.execute_query("MERGE (u:User {username: 'T002'}) SET u.password = '123456', u.role = 'teacher', u.real_name = '王老师', u.college = '经管学院'")
     except Exception as e:
         print(f"Mock Teacher Injection failed (Neo4j possibly down): {e}")
 
@@ -193,80 +233,58 @@ def chat_endpoint(request: ChatRequest):
     return ChatResponse(reply=final_reply, agent=display_name)
 
 @app.post("/api/projects")
-def create_project_endpoint(project: ProjectCreateRequest):
-    # 1. 组长必填性核验
-    has_leader = any(m.role in ["Leader", "组长"] for m in project.members)
-    if not has_leader:
-        raise HTTPException(status_code=400, detail="项目必须包含至少一名组长（Leader/组长）")
-
-    # 2. 指导老师实名核验 (Neo4j)
-    if project.advisorName:
-        # 判断真实姓名、工号、学院是否匹配
-        verify_advisor_q = """
-            MATCH (u:User {role: 'teacher', real_name: $name, username: $id, college: $college}) 
-            RETURN u
-        """
-        advisor_res = db.execute_query(verify_advisor_q, {
-            "name": project.advisorName, 
-            "id": project.advisorId, 
-            "college": project.college
-        })
-        if not advisor_res:
-            raise HTTPException(status_code=400, detail=f"指导老师校验失败：无法在系统中找到名为 {project.advisorName}、工号为 {project.advisorId} 且属于 {project.college} 的已注册教师。")
-
-    # 3. 团队成员实名核验 (Neo4j)
-    for m in project.members:
-        # 判断真实姓名、学号、学院、专业、年级是否匹配
-        # 这里允许 m.college 为空则回退到项目所属学院
-        verify_member_q = """
-            MATCH (u:User {role: 'student', real_name: $name, username: $id, college: $college, major: $major, grade: $grade}) 
-            RETURN u
-        """
-        member_res = db.execute_query(verify_member_q, {
-            "name": m.name,
-            "id": m.student_id,
-            "college": m.college or project.college,
-            "major": m.major,
-            "grade": m.grade
-        })
-        if not member_res:
-            raise HTTPException(status_code=400, detail=f"成员校验失败：名为 {m.name}、学号为 {m.student_id} 的同学未注册或填写的学院专业年级信息有误。")
+async def create_project_endpoint(project: ProjectCreateRequest):
+    # 严格实名准入核验 (通用逻辑已覆盖创建与更新)
+    verify_project_members(project)
 
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO projects (name, owner_id, competition, track, college, advisor_name, advisor_id, advisor_info, content)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (project.name, project.owner_id, project.competition, project.track, project.college, project.advisorName, project.advisorId, project.advisorInfo, project.content))
-    project_id = cursor.lastrowid
     
-    today = datetime.date.today()
-    ddls = []
-    if project.competition == "互联网+":
-        ddls = [
-            ("项目立项", today.strftime("%Y-%m-%d")),
-            ("计划书初稿截止", (today + datetime.timedelta(days=14)).strftime("%Y-%m-%d")),
-            ("商业模式深度复核", (today + datetime.timedelta(days=28)).strftime("%Y-%m-%d")),
-            ("国赛/省赛网评截止", "2026-06-30")
-        ]
-    elif project.competition == "挑战杯":
-        ddls = [
-            ("技术方案定稿", (today + datetime.timedelta(days=10)).strftime("%Y-%m-%d")),
-            ("实物模型演示", (today + datetime.timedelta(days=30)).strftime("%Y-%m-%d")),
-            ("省赛申报截止", "2026-04-15")
-        ]
+    # 判断是创建还是更新逻辑
+    if project.id:
+        # 更新存量项目基本信息
+        cursor.execute("""
+            UPDATE projects SET name=?, competition=?, track=?, college=?, advisor_name=?, advisor_id=?, advisor_info=?
+            WHERE id=?
+        """, (project.name, project.competition, project.track, project.college, project.advisorName, project.advisorId, project.advisorInfo, project.id))
+        project_id = project.id
+        # 清理并重建成员关系（确保实名绑定的最新性）
+        cursor.execute("DELETE FROM members WHERE project_id = ?", (project_id,))
     else:
-        ddls = [
-            ("项目启动", today.strftime("%Y-%m-%d")),
-            ("中期进度汇报", (today + datetime.timedelta(days=30)).strftime("%Y-%m-%d")),
-            ("结项验收", (today + datetime.timedelta(days=60)).strftime("%Y-%m-%d"))
-        ]
-
-    for title, d_date in ddls:
-        cursor.execute("INSERT INTO deadlines (project_id, title, due_date) VALUES (?, ?, ?)", (project_id, title, d_date))
+        # 创建新项目
+        cursor.execute("""
+            INSERT INTO projects (name, owner_id, competition, track, college, advisor_name, advisor_id, advisor_info, content)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (project.name, project.owner_id, project.competition, project.track, project.college, project.advisorName, project.advisorId, project.advisorInfo, project.content))
+        project_id = cursor.lastrowid
+        
+        today = datetime.date.today()
+        ddls = []
+        if project.competition == "互联网+":
+            ddls = [
+                ("项目立项", today.strftime("%Y-%m-%d")),
+                ("计划书初稿截止", (today + datetime.timedelta(days=14)).strftime("%Y-%m-%d")),
+                ("商业模式深度复核", (today + datetime.timedelta(days=28)).strftime("%Y-%m-%d")),
+                ("国赛/省赛网评截止", "2026-06-30")
+            ]
+        elif project.competition == "挑战杯":
+            ddls = [
+                ("技术方案定稿", (today + datetime.timedelta(days=10)).strftime("%Y-%m-%d")),
+                ("实物模型演示", (today + datetime.timedelta(days=30)).strftime("%Y-%m-%d")),
+                ("省赛申报截止", "2026-04-15")
+            ]
+        else:
+            ddls = [
+                ("项目启动", today.strftime("%Y-%m-%d")),
+                ("中期进度汇报", (today + datetime.timedelta(days=30)).strftime("%Y-%m-%d")),
+                ("结项验收", (today + datetime.timedelta(days=60)).strftime("%Y-%m-%d"))
+            ]
+        for title, d_date in ddls:
+            cursor.execute("INSERT INTO deadlines (project_id, title, due_date) VALUES (?, ?, ?)", (project_id, title, d_date))
+        
+        cursor.execute("INSERT INTO evolution_logs (project_id, event) VALUES (?, ?)", (project_id, f"完成《{project.name}》初步申报入库"))
     
-    cursor.execute("INSERT INTO evolution_logs (project_id, event) VALUES (?, ?)", (project_id, f"完成《{project.name}》初步申报入库"))
-    
+    # 插入项目成员表
     if project.advisorName:
         cursor.execute("""
             INSERT INTO members (project_id, name, student_id, role, position, info, college)

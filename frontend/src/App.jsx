@@ -17,9 +17,13 @@ function Portal() {
   const [password, setPassword] = useState('');
   const [realName, setRealName] = useState('');
   const [idNum, setIdNum] = useState(''); // 注册时输入的学号/工号
+  const [regPassword, setRegPassword] = useState(''); // 注册时设置密码
+  const [confirmPassword, setConfirmPassword] = useState(''); // 确认密码
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showRegPass, setShowRegPass] = useState(false);
+  const [showConfirmPass, setShowConfirmPass] = useState(false);
 
   const handleCardClick = (path) => {
     setTargetRole(path);
@@ -41,39 +45,32 @@ function Portal() {
     setIsLoading(true);
     setErrorMsg('');
     try {
-      if (modalType === 'register') {
-        // 注册流：先显示完善信息界面
-        setShowOnboarding(true);
-      } else {
-        // 登录流：调用后端接口
-        const response = await fetch('http://localhost:8000/api/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username: username, password: password }),
-        });
+      // 登录流：调用后端接口
+      const response = await fetch('http://localhost:8000/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: username, password: password }),
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        localStorage.setItem('va_username', data.username);
+        localStorage.setItem('va_realname', data.real_name);
+        localStorage.setItem('va_token', data.token);
+        localStorage.setItem('va_college', data.college);
         
-        const data = await response.json();
+        const finalRole = data.role || (targetRole === '/teacher' ? 'teacher' : 'student');
+        localStorage.setItem('va_role', finalRole);
         
-        if (response.ok) {
-          localStorage.setItem('va_username', data.username);
-          localStorage.setItem('va_realname', data.real_name);
-          localStorage.setItem('va_token', data.token);
-          localStorage.setItem('va_college', data.college);
-          
-          // 优先使用后端返回的角色，如果没有则回退到点击的侧导向角色
-          const finalRole = data.role || (targetRole === '/teacher' ? 'teacher' : 'student');
-          localStorage.setItem('va_role', finalRole);
-          
-          if (data.teacher_id) {
-            localStorage.setItem('va_teacher_id', data.teacher_id);
-          }
-          
-          // 如果后端返回的角色与目标不符，跳转到真正角色对应的页面
-          const actualPath = finalRole === 'teacher' ? '/teacher' : '/student';
-          navigate(actualPath);
-        } else {
-          setErrorMsg(data.detail || '登录失败，请检查学号/工号或密码');
+        if (data.teacher_id) {
+          localStorage.setItem('va_teacher_id', data.teacher_id);
         }
+        
+        const actualPath = finalRole === 'teacher' ? '/teacher' : '/student';
+        navigate(actualPath);
+      } else {
+        setErrorMsg(data.detail || '登录失败，请检查学号/工号或密码');
       }
     } catch (err) {
       setErrorMsg('认证失败，请检查网络或尝试重新登录');
@@ -84,8 +81,16 @@ function Portal() {
 
   const handleOnboardingSubmit = async (e) => {
     e.preventDefault();
-    if (!realName || !idNum || !school) {
+    if (!realName || !idNum || !school || !regPassword || !confirmPassword) {
       setErrorMsg('请填写完整的注册信息');
+      return;
+    }
+    if (regPassword !== confirmPassword) {
+      setErrorMsg('两次输入的密码不一致');
+      return;
+    }
+    if (regPassword.length < 6) {
+      setErrorMsg('密码长度不能少于 6 位');
       return;
     }
 
@@ -96,7 +101,7 @@ function Portal() {
         role: targetRole === '/teacher' ? 'teacher' : 'student',
         real_name: realName,
         id_num: idNum,
-        password: password,
+        password: regPassword,
         college: school,
         major: targetRole === '/student' ? major : null,
         grade: targetRole === '/student' ? grade : null
@@ -302,7 +307,7 @@ function Portal() {
 
                 <div className="mt-8 text-center text-[13px] text-slate-400 font-medium">
                   {modalType === 'login' ? (
-                    <span>还没有账号？ <button type="button" onClick={() => {setModalType('register'); setErrorMsg('');}} className="text-blue-600 font-bold hover:underline">立即注册</button></span>
+                    <span>还没有账号？ <button type="button" onClick={() => {setShowOnboarding(true); setErrorMsg('');}} className="text-blue-600 font-bold hover:underline">立即注册</button></span>
                   ) : (
                     <span>已有账号？ <button type="button" onClick={() => {setModalType('login'); setErrorMsg('');}} className="text-blue-600 font-bold hover:underline">返回登录</button></span>
                   )}
@@ -312,7 +317,7 @@ function Portal() {
               // Onboarding 表单
               <div className="animate-in slide-in-from-right-10 duration-500">
                 <div className="text-center mb-10">
-                  <div className="w-16 h-16 rounded-3xl bg-blue-600 text-white mx-auto flex items-center justify-center mb-6 shadow-xl shadow-blue-200">
+                  <div className={`w-16 h-16 rounded-3xl mx-auto flex items-center justify-center mb-6 shadow-xl ${targetRole === '/student' ? 'bg-blue-600 shadow-blue-200' : 'bg-emerald-600 shadow-emerald-200'} text-white`}>
                     <span className="material-symbols-outlined text-4xl">edit_note</span>
                   </div>
                   <h2 className="text-2xl font-black text-slate-900 mb-2">完善实名注册信息</h2>
@@ -327,7 +332,7 @@ function Portal() {
                         type="text" 
                         value={realName}
                         onChange={e => setRealName(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-100 rounded-xl px-5 py-3 text-sm focus:bg-white focus:ring-4 focus:ring-blue-50 focus:border-blue-400 transition-all"
+                        className={`w-full bg-slate-50 border border-slate-100 rounded-xl px-5 py-3 text-sm focus:bg-white focus:ring-4 transition-all ${targetRole === '/student' ? 'focus:ring-blue-50 focus:border-blue-400' : 'focus:ring-emerald-50 focus:border-emerald-400'}`}
                         placeholder="姓名"
                       />
                     </div>
@@ -337,7 +342,7 @@ function Portal() {
                         type="text" 
                         value={idNum}
                         onChange={e => setIdNum(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-100 rounded-xl px-5 py-3 text-sm focus:bg-white focus:ring-4 focus:ring-blue-50 focus:border-blue-400 transition-all"
+                        className={`w-full bg-slate-50 border border-slate-100 rounded-xl px-5 py-3 text-sm focus:bg-white focus:ring-4 transition-all ${targetRole === '/student' ? 'focus:ring-blue-50 focus:border-blue-400' : 'focus:ring-emerald-50 focus:border-emerald-400'}`}
                         placeholder="ID 号"
                       />
                     </div>
@@ -348,7 +353,7 @@ function Portal() {
                       type="text" 
                       value={school}
                       onChange={e => setSchool(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-100 rounded-xl px-5 py-3 text-sm focus:bg-white focus:ring-4 focus:ring-blue-50 focus:border-blue-400 transition-all"
+                      className={`w-full bg-slate-50 border border-slate-100 rounded-xl px-5 py-3 text-sm focus:bg-white focus:ring-4 transition-all ${targetRole === '/student' ? 'focus:ring-blue-50 focus:border-blue-400' : 'focus:ring-emerald-50 focus:border-emerald-400'}`}
                       placeholder="例如：计算机学院"
                     />
                   </div>
@@ -360,7 +365,7 @@ function Portal() {
                           type="text" 
                           value={major}
                           onChange={e => setMajor(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-100 rounded-xl px-5 py-3 text-sm focus:bg-white focus:ring-4 focus:ring-blue-50 focus:border-blue-400 transition-all"
+                          className={`w-full bg-slate-50 border border-slate-100 rounded-xl px-5 py-3 text-sm focus:bg-white focus:ring-4 transition-all ${targetRole === '/student' ? 'focus:ring-blue-50 focus:border-blue-400' : 'focus:ring-emerald-50 focus:border-emerald-400'}`}
                           placeholder="例如：软件工程"
                         />
                       </div>
@@ -369,7 +374,7 @@ function Portal() {
                         <select
                           value={grade}
                           onChange={e => setGrade(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-100 rounded-xl px-5 py-3 text-sm focus:bg-white focus:ring-4 focus:ring-blue-50 focus:border-blue-400 transition-all appearance-none"
+                          className={`w-full bg-slate-50 border border-slate-100 rounded-xl px-5 py-3 text-sm focus:bg-white focus:ring-4 transition-all appearance-none ${targetRole === '/student' ? 'focus:ring-blue-50 focus:border-blue-400' : 'focus:ring-emerald-50 focus:border-emerald-400'}`}
                         >
                           <option value="">请选择年级...</option>
                           <option value="大一">大一</option>
@@ -383,6 +388,54 @@ function Portal() {
                       </div>
                     </>
                   )}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 ml-1">设置密码</label>
+                      <div className="relative">
+                        <input 
+                          type={showRegPass ? "text" : "password"} 
+                          value={regPassword}
+                          onChange={e => setRegPassword(e.target.value)}
+                          className={`w-full bg-slate-50 border border-slate-100 rounded-xl px-5 py-3 text-sm focus:bg-white focus:ring-4 transition-all pr-12 ${targetRole === '/student' ? 'focus:ring-blue-50 focus:border-blue-400' : 'focus:ring-emerald-50 focus:border-emerald-400'}`}
+                          placeholder="请输入密码"
+                        />
+                        <button 
+                          type="button"
+                          onMouseDown={() => setShowRegPass(true)}
+                          onMouseUp={() => setShowRegPass(false)}
+                          onMouseLeave={() => setShowRegPass(false)}
+                          onTouchStart={() => setShowRegPass(true)}
+                          onTouchEnd={() => setShowRegPass(false)}
+                          className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-600 transition-colors"
+                        >
+                          <span className="material-symbols-outlined text-[18px]">{showRegPass ? 'visibility' : 'visibility_off'}</span>
+                        </button>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 ml-1">确认密码</label>
+                      <div className="relative">
+                        <input 
+                          type={showConfirmPass ? "text" : "password"} 
+                          value={confirmPassword}
+                          onChange={e => setConfirmPassword(e.target.value)}
+                          className={`w-full bg-slate-50 border border-slate-100 rounded-xl px-5 py-3 text-sm focus:bg-white focus:ring-4 transition-all pr-12 ${targetRole === '/student' ? 'focus:ring-blue-50 focus:border-blue-400' : 'focus:ring-emerald-50 focus:border-emerald-400'}`}
+                          placeholder="再次输入"
+                        />
+                        <button 
+                          type="button"
+                          onMouseDown={() => setShowConfirmPass(true)}
+                          onMouseUp={() => setShowConfirmPass(false)}
+                          onMouseLeave={() => setShowConfirmPass(false)}
+                          onTouchStart={() => setShowConfirmPass(true)}
+                          onTouchEnd={() => setShowConfirmPass(false)}
+                          className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-600 transition-colors"
+                        >
+                          <span className="material-symbols-outlined text-[18px]">{showConfirmPass ? 'visibility' : 'visibility_off'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
 
                   {errorMsg && (
                     <div className="text-red-500 text-[11px] font-bold animate-pulse text-center">{errorMsg}</div>
@@ -391,11 +444,15 @@ function Portal() {
                   <button 
                     type="submit"
                     disabled={isLoading}
-                    className="w-full py-4 mt-6 rounded-2xl bg-slate-900 text-white font-black text-sm tracking-widest hover:bg-black transition-all shadow-xl active:scale-95 disabled:bg-slate-300"
+                    className={`w-full py-4 mt-6 rounded-2xl text-white font-black text-sm tracking-widest transition-all shadow-xl active:scale-95 disabled:bg-slate-300 ${targetRole === '/student' ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-200' : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200'}`}
                   >
                     {isLoading ? '提交中...' : '开 始 体 验'}
                   </button>
                 </form>
+
+                <div className="mt-6 text-center text-[13px] text-slate-400 font-medium pb-2">
+                  已有账号？ <button type="button" onClick={() => {setShowOnboarding(false); setModalType('login'); setErrorMsg('');}} className={`${targetRole === '/student' ? 'text-blue-600' : 'text-emerald-600'} font-bold hover:underline`}>返回登录</button>
+                </div>
               </div>
             )}
 
