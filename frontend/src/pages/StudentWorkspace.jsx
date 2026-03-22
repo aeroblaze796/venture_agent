@@ -306,7 +306,7 @@ const StudentWorkspace = () => {
     try {
       const res = await fetch("http://localhost:8000/api/chat", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: inputValue, session_id: activeSessionId })
+        body: JSON.stringify({ message: inputValue, session_id: activeSessionId, project_id: activeProjectId })
       });
       const data = await res.json();
       setChatLog(prev => [...prev, { role: 'coach', agent: data.agent, text: data.reply }]);

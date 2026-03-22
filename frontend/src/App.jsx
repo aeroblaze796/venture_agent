@@ -55,6 +55,7 @@ function Portal() {
         if (response.ok) {
           localStorage.setItem('va_username', data.username);
           localStorage.setItem('va_token', data.token);
+          localStorage.setItem('va_role', targetRole === '/teacher' ? 'teacher' : 'student');
           navigate(targetRole);
         } else {
           setErrorMsg(data.detail || '登录失败，请检查用户名或密码');
@@ -97,6 +98,7 @@ function Portal() {
         localStorage.setItem('va_major', major);
         localStorage.setItem('va_grade', grade);
         localStorage.setItem('va_token', username); // 使用用户名作为 mock token
+        localStorage.setItem('va_role', targetRole === '/teacher' ? 'teacher' : 'student');
         setShowLoginModal(false);
         setShowOnboarding(false);
         navigate(targetRole);
@@ -363,13 +365,42 @@ function Portal() {
   );
 }
 
+// 简单的路由守卫组件
+function RoleGuard({ children, requiredRole }) {
+  const username = localStorage.getItem('va_username');
+  const role = localStorage.getItem('va_role');
+  
+  if (!username) return <Navigate to="/" replace />;
+  
+  // 如果请求的是教师端，但当前角色不是老师，则重定向
+  if (requiredRole === 'teacher' && role !== 'teacher') {
+    return <Navigate to="/student" replace />;
+  }
+  
+  return children;
+}
+
 function App() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Portal />} />
-        <Route path="/student" element={<StudentWorkspace />} />
-        <Route path="/teacher" element={<TeacherDashboard />} />
+        <Route 
+          path="/student" 
+          element={
+            <RoleGuard requiredRole="student">
+              <StudentWorkspace />
+            </RoleGuard>
+          } 
+        />
+        <Route 
+          path="/teacher" 
+          element={
+            <RoleGuard requiredRole="teacher">
+              <TeacherDashboard />
+            </RoleGuard>
+          } 
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
