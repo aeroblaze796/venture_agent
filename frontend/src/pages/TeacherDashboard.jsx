@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import UserProfileModal from '../components/UserProfileModal';
 import { 
   Table, Tag, Badge, Progress, Card, Button, 
   Statistic, Empty, Spin, message as antMessage,
@@ -455,43 +456,11 @@ export default function TeacherDashboard() {
         </div>
       </main>
 
-      {/* 修改资料 Modal */}
-      <Modal 
-        title="教师档案设置" 
+      <UserProfileModal 
         visible={showProfileModal} 
-        onCancel={() => setShowProfileModal(false)}
-        onOk={() => {
-          localStorage.setItem('va_realname', editName);
-          localStorage.setItem('va_username', editId);
-          setTeacherName(editName);
-          setTeacherId(editId);
-          setShowProfileModal(false);
-          antMessage.success("设置已更新，数据已同步");
-        }}
-        okButtonProps={{ className: 'bg-emerald-600 font-bold px-6 rounded-lg border-none' }}
-        okText="保存"
-        cancelText="取消"
-      >
-         <div className="py-6 space-y-6">
-           <div className="flex flex-col items-center gap-4 mb-4">
-              <Avatar size={80} src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${editName}`} border="4px solid #10b981" />
-              <div className="text-center font-bold text-lg text-slate-800">{editName}</div>
-           </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs text-slate-400 font-bold uppercase mb-2 block">显示姓名 (公开署名)</label>
-                <Input size="large" value={editName} onChange={e => setEditName(e.target.value)} className="rounded-xl" />
-              </div>
-              <div>
-                <label className="text-xs text-slate-400 font-bold uppercase mb-2 block">唯一教师 ID (关键同步码)</label>
-                <Input size="large" value={editId} onChange={e => setEditId(e.target.value)} className="rounded-xl font-mono" placeholder="如 T001" />
-              </div>
-            </div>
-           <p className="text-[11px] text-slate-400 italic bg-amber-50 p-3 rounded-lg border border-amber-100">
-             安全提示：您的辅导指令将以加密形式传输，学生无法直接查看锦囊源码，但会感知到对话逻辑的侧重变化。
-           </p>
-         </div>
-      </Modal>
+        onCancel={() => setShowProfileModal(false)} 
+        username={localStorage.getItem('va_username') || 'teacher'} 
+      />
 
       <style dangerouslySetInnerHTML={{__html: `
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }

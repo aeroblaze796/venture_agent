@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, Menu, Card, Row, Col, Statistic, Table, Tag, Button, Empty, message, Descriptions, Divider } from 'antd';
+import { Layout, Menu, Card, Row, Col, Statistic, Table, Tag, Button, Empty, message, Descriptions, Divider, Avatar } from 'antd';
 import { 
   DashboardOutlined, 
   ProjectOutlined, 
@@ -8,10 +8,13 @@ import {
   NodeIndexOutlined,
   LogoutOutlined,
   SafetyCertificateOutlined,
+  SafetyOutlined,
   GlobalOutlined,
-  RocketOutlined
+  RocketOutlined,
+  UserOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
+import UserProfileModal from '../components/UserProfileModal';
 
 const { Header, Content, Sider } = Layout;
 
@@ -26,6 +29,8 @@ const AdminMatrix = () => {
   const [tableData, setTableData] = useState({ columns: [], data: [] });
   const [sqliteLoading, setSqliteLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [profileVisible, setProfileVisible] = useState(false);
+  const username = localStorage.getItem('username') || '001';
 
   useEffect(() => {
     if (activeTab === 'dashboard') {
@@ -142,34 +147,40 @@ const AdminMatrix = () => {
   return (
     <Layout className="min-h-screen bg-[#f8f9ff]">
       <Sider width={260} theme="light" className="border-r border-indigo-50" style={{ background: '#fff' }}>
-        <div className="p-8 flex items-center gap-3">
-          <div className="w-10 h-10 bg-purple-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-purple-200">
-            <NodeIndexOutlined className="text-xl" />
+        <div className="flex flex-col justify-between h-full bg-slate-900 overflow-hidden relative">
+          <div>
+            <div className="p-8 flex items-center justify-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center text-xl text-white shadow-lg shadow-indigo-500/20">
+                <SafetyOutlined />
+              </div>
+              <div>
+                <h1 className="text-white text-lg font-black m-0 tracking-tighter">VENTURE</h1>
+                <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mt-[-2px]">ADMIN MATRIX</p>
+              </div>
+            </div>
+            <Menu
+              theme="dark"
+              mode="inline"
+              className="px-4 border-none bg-transparent lofty-menu"
+              selectedKeys={[activeTab]}
+              onClick={({ key }) => setActiveTab(key)}
+              items={[
+                { key: 'dashboard', icon: <DashboardOutlined />, label: '全局大盘概览' },
+                { key: 'projects', icon: <ProjectOutlined />, label: '全量项目监控' },
+                { key: 'users', icon: <NodeIndexOutlined />, label: 'Neo4j 身份图谱' },
+                { key: 'sqlite', icon: <DatabaseOutlined />, label: 'SQLite 实验室' },
+              ]}
+            />
           </div>
-          <span className="text-lg font-black text-slate-800 tracking-tighter">Admin Matrix</span>
-        </div>
-        <Menu
-          mode="inline"
-          selectedKeys={[activeTab]}
-          onClick={({ key }) => setActiveTab(key)}
-          className="border-none px-4"
-          items={[
-            { key: 'dashboard', icon: <DashboardOutlined />, label: '全域大盘概览' },
-            { key: 'projects', icon: <ProjectOutlined />, label: '全量项目监控' },
-            { key: 'users', icon: <TeamOutlined />, label: 'Neo4j 身份图谱' },
-            { key: 'sqlite', icon: <DatabaseOutlined />, label: 'SQLite 状态机' },
-          ]}
-        />
-        <div className="absolute bottom-10 w-full px-8">
-          <Button 
-            onClick={handleLogout}
-            icon={<LogoutOutlined />} 
-            block 
-            shape="round" 
-            className="h-12 border-none bg-slate-100 text-slate-500 font-bold hover:bg-rose-50 hover:text-rose-500 transition-all"
-          >
-            安全退出
-          </Button>
+          
+          <div className="p-4 border-t border-white/5 m-4 text-center">
+             <div 
+                onClick={handleLogout}
+                className="w-full py-3 rounded-2xl text-slate-500 hover:text-red-400 hover:bg-white/5 cursor-pointer transition-all flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest"
+             >
+                <LogoutOutlined /> 安全退出系统
+             </div>
+          </div>
         </div>
       </Sider>
 
@@ -183,16 +194,19 @@ const AdminMatrix = () => {
             </span>
           </div>
           <div className="flex items-center gap-4">
-            <Tag color="purple" className="border-none font-bold px-3 py-1 rounded-full">超级管理员</Tag>
-            <div className="w-10 h-10 rounded-full bg-slate-100 border-2 border-white shadow-sm flex items-center justify-center overflow-hidden">
-               <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Admin" alt="avatar" />
+            <Tag color="purple" className="border-none font-bold px-3 py-1 rounded-full shadow-sm">超级管理员</Tag>
+            <div 
+              className="w-10 h-10 rounded-full bg-slate-100 border-2 border-indigo-100 shadow-sm flex items-center justify-center overflow-hidden cursor-pointer hover:border-indigo-400 hover:scale-105 transition-all"
+              onClick={() => setProfileVisible(true)}
+            >
+               <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`} alt="avatar" />
             </div>
           </div>
         </Header>
 
-        <Content className="p-10 custom-scrollbar overflow-y-auto">
+        <Content className="px-10 pt-10 pb-0 custom-scrollbar overflow-y-auto bg-[#f8f9ff] min-h-[calc(100vh-80px)]">
           {activeTab === 'dashboard' && (
-            <div className="space-y-10 animate-in fade-in duration-500">
+            <div className="space-y-10 animate-in fade-in duration-500 pb-10">
               <Row gutter={[24, 24]}>
                 <Col span={6}>
                   <Card className="rounded-[32px] border-none shadow-xl shadow-indigo-500/5 p-4 text-center">
@@ -210,30 +224,41 @@ const AdminMatrix = () => {
                   </Card>
                 </Col>
                 <Col span={6}>
-                  <Card className="rounded-[32px] border-none shadow-xl shadow-indigo-500/5 p-4 text-center bg-purple-600">
-                    <Statistic title={<span className="text-[10px] font-black text-purple-200 uppercase tracking-[0.2em]">系统运行健康度</span>} value="99.8" suffix="%" valueStyle={{ fontWeight: 900, color: '#fff' }} />
+                  <Card className="rounded-[32px] border-none shadow-xl shadow-indigo-500/5 p-4 text-center bg-white border border-indigo-50">
+                    <Statistic title={<span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">系统运行健康度</span>} value="99.8" suffix={<span className="text-emerald-500 text-xs font-black">%</span>} valueStyle={{ fontWeight: 900, color: '#6366f1' }} />
                   </Card>
                 </Col>
               </Row>
 
               <Row gutter={24}>
                 <Col span={16}>
-                  <Card className="rounded-[40px] border border-indigo-50 shadow-2xl shadow-indigo-500/10 p-2 overflow-hidden" title={<span className="text-sm font-black text-slate-700 uppercase tracking-widest flex items-center gap-2"><GlobalOutlined className="text-purple-500" /> 近期活跃项目流</span>}>
-                    <Table 
-                      dataSource={projects.slice(0, 5)} 
-                      columns={projectColumns.slice(0, 4)} 
-                      pagination={false} 
-                      className="admin-mini-table"
-                      rowKey="id"
-                    />
+                  <Card className="rounded-[40px] border border-indigo-50 shadow-2xl shadow-indigo-500/10 p-2 overflow-hidden min-h-[460px] flex flex-col" title={<span className="text-sm font-black text-slate-700 uppercase tracking-widest flex items-center gap-2"><GlobalOutlined className="text-purple-500" /> 近期活跃项目流 (Real-time Flux)</span>}>
+                    <div className="flex-1 overflow-auto">
+                      <Table 
+                        dataSource={projects} 
+                        columns={projectColumns.slice(0, 4)} 
+                        pagination={{ pageSize: 8, hideOnSinglePage: true }} 
+                        className="admin-mini-table"
+                        rowKey="id"
+                        size="small"
+                      />
+                    </div>
                   </Card>
                 </Col>
                 <Col span={8}>
-                  <Card className="rounded-[40px] border border-indigo-50 shadow-2xl shadow-indigo-500/10 p-6 flex flex-col justify-center text-center gap-4 bg-gradient-to-br from-white to-indigo-50/30">
-                    <div className="w-20 h-20 bg-purple-50 rounded-full flex items-center justify-center text-4xl text-purple-600 mx-auto shadow-inner"><SafetyCertificateOutlined /></div>
-                    <div className="space-y-2">
-                       <h3 className="text-lg font-black text-slate-800">校级双创决策大脑</h3>
-                       <p className="text-xs text-slate-400 leading-relaxed font-medium">当前已有 {Object.keys(stats.college_distribution).length} 个二级学院接入平台，项目集中度最高的学院为：<br/><span className="text-purple-600 font-bold">{Object.entries(stats.college_distribution).sort((a,b)=>b[1]-a[1])[0]?.[0] || '---'}</span></p>
+                  <Card className="rounded-[40px] border border-indigo-50 shadow-2xl shadow-indigo-500/10 p-10 flex flex-col justify-center text-center gap-6 bg-gradient-to-br from-white to-indigo-50/40 h-full min-h-[460px]">
+                    <div className="w-24 h-24 bg-purple-50 rounded-full flex items-center justify-center text-5xl text-purple-600 mx-auto shadow-inner border-4 border-white"><SafetyCertificateOutlined /></div>
+                    <div className="space-y-4">
+                       <h3 className="text-xl font-black text-slate-800">校级双创决策大脑</h3>
+                       <p className="text-xs text-slate-400 leading-relaxed font-black uppercase tracking-widest">
+                         当前接入学院: <span className="text-indigo-600">{Object.keys(stats.college_distribution).length}</span><br/>
+                         核心业务覆盖度: <span className="text-emerald-500">92.5%</span>
+                       </p>
+                       <Divider dashed />
+                       <div className="p-4 bg-white/50 rounded-3xl border border-white">
+                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">活跃贡献排行</p>
+                         <p className="text-lg font-black text-purple-600 m-0">{Object.entries(stats.college_distribution).sort((a,b)=>b[1]-a[1])[0]?.[0] || '系统计算中...'}</p>
+                       </div>
                     </div>
                   </Card>
                 </Col>
@@ -242,32 +267,35 @@ const AdminMatrix = () => {
           )}
 
           {activeTab === 'projects' && (
-            <div className="animate-in fade-in slide-in-from-bottom-5 duration-500">
-              <Card className="rounded-[40px] border-none shadow-2xl shadow-indigo-500/10 p-6">
+            <div className="animate-in fade-in slide-in-from-bottom-5 duration-500 pb-10">
+              <Card className="rounded-[40px] border-none shadow-2xl shadow-indigo-500/10 p-8 min-h-[calc(100vh-120px)] flex flex-col">
                 <div className="flex justify-between items-center mb-10 px-4">
                   <div>
-                    <h2 className="text-2xl font-black text-slate-800 m-0">全量项目数据库监控</h2>
+                    <h2 className="text-2xl font-black text-slate-800 m-0">全量项目数据库监控 (Central Matrix)</h2>
                     <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.3em] mt-2">Real-time SQLite Project Tracking Matrix</p>
                   </div>
-                  <Button onClick={fetchProjects} icon={<RocketOutlined />} shape="round" className="h-12 px-8 font-black bg-slate-900 border-none text-white shadow-xl shadow-slate-200">刷新全量快照</Button>
+                  <Button onClick={fetchProjects} icon={<RocketOutlined />} shape="round" className="h-12 px-8 font-black bg-slate-900 border-none text-white shadow-xl shadow-slate-200 hover:scale-105 transition-all">刷新全量快照</Button>
                 </div>
-                <Table 
-                  loading={isLoading}
-                  dataSource={projects} 
-                  columns={projectColumns} 
-                  rowKey="id"
-                  className="lofty-table"
-                  pagination={{ pageSize: 8, hideOnSinglePage: true }}
-                />
+                <div className="flex-1 bg-white rounded-[32px] overflow-hidden">
+                  <Table 
+                    loading={isLoading}
+                    dataSource={projects} 
+                    columns={projectColumns} 
+                    rowKey="id"
+                    className="lofty-table h-full"
+                    pagination={{ pageSize: 12, hideOnSinglePage: false }}
+                    scroll={{ y: 'calc(100vh - 480px)' }}
+                  />
+                </div>
               </Card>
             </div>
           )}
 
           {activeTab === 'users' && (
             <div className="animate-in fade-in duration-500">
-               <Row gutter={24}>
+               <Row gutter={24} className="pb-10">
                   <Col span={10}>
-                    <Card className="rounded-[40px] border-none shadow-2xl shadow-indigo-500/10 p-6 h-[calc(100vh-160px)] flex flex-col">
+                    <Card className="rounded-[40px] border-none shadow-2xl shadow-indigo-500/10 p-6 h-[calc(100vh-120px)] flex flex-col">
                       <h3 className="text-sm font-black text-slate-700 uppercase tracking-widest mb-8 px-4 flex items-center gap-2"><TeamOutlined className="text-indigo-500" /> 用户实名名录</h3>
                       <div className="flex-1 overflow-auto">
                         <Table dataSource={users} columns={userColumns} rowKey="username" className="lofty-table" pagination={{ pageSize: 12, size: 'small' }} size="small" />
@@ -275,7 +303,7 @@ const AdminMatrix = () => {
                     </Card>
                   </Col>
                   <Col span={14}>
-                     <div className="h-[calc(100vh-160px)] rounded-[40px] overflow-hidden border border-indigo-100 shadow-2xl relative flex flex-col bg-slate-900 text-white">
+                     <div className="h-[calc(100vh-120px)] rounded-[40px] overflow-hidden border border-indigo-100 shadow-2xl relative flex flex-col bg-slate-900 text-white">
                         <div className="px-8 py-4 flex items-center justify-between border-b border-white/5">
                             <div className="flex items-center gap-3">
                                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
@@ -309,7 +337,7 @@ const AdminMatrix = () => {
 
           {activeTab === 'sqlite' && (
             <div className="animate-in fade-in slide-in-from-bottom-5 duration-500">
-               <Card className="rounded-[40px] border-none shadow-2xl shadow-indigo-500/10 p-8 h-[calc(100vh-160px)] flex flex-col overflow-hidden">
+               <Card className="rounded-[40px] border-none shadow-2xl shadow-indigo-500/10 p-8 h-[calc(100vh-120px)] flex flex-col overflow-hidden mb-10">
                   <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 px-2">
                      <div className="flex items-center gap-4">
                         <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center text-2xl text-emerald-600 shadow-inner">
@@ -356,6 +384,12 @@ const AdminMatrix = () => {
           )}
         </Content>
       </Layout>
+
+      <UserProfileModal 
+        visible={profileVisible} 
+        onCancel={() => setProfileVisible(false)} 
+        username={username}
+      />
     </Layout>
   );
 };

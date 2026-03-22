@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import pypdf
@@ -771,6 +771,46 @@ def admin_get_sqlite_data(table_name: str):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         conn.close()
+
+# --- 用户资料管理 ---
+class ProfileUpdate(BaseModel):
+    real_name: Optional[str] = None
+    college: Optional[str] = None
+
+@app.get("/api/user/profile")
+def get_user_profile(username: str = Query(...)):
+    """获取用户详细资料"""
+    try:
+        query = "MATCH (u:User {username: $username}) RETURN u.username as username, u.real_name as real_name, u.role as role, u.college as college"
+        result = db.execute_query(query, {"username": username})
+        if not result:
+            raise HTTPException(status_code=404, detail="User not found")
+        return record.data() if (record := result[0]) else {}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/user/profile/update")
+def update_user_profile(username: str, data: ProfileUpdate):
+    """更新用户资料"""
+    try:
+        # 构建动态更新语句
+        updates = []
+        params = {"username": username}
+        if data.real_name is not None:
+            updates.append("u.real_name = $real_name")
+            params["real_name"] = data.real_name
+        if data.college is not None:
+            updates.append("u.college = $college")
+            params["college"] = data.college
+            
+        if not updates:
+            return {"message": "No changes"}
+            
+        query = f"MATCH (u:User {{username: $username}}) SET {', '.join(updates)} RETURN u"
+        db.execute_query(query, params)
+        return {"message": "Profile updated successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

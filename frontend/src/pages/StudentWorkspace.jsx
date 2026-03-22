@@ -40,6 +40,7 @@ import {
   SyncOutlined
 } from "@ant-design/icons";
 import "./VentureDashboard.css";
+import UserProfileModal from "../components/UserProfileModal";
 
 // --- 微型 SVG 雷达图组件 ---
 const RadarChart = ({ data, size = 180 }) => {
@@ -1256,15 +1257,11 @@ const StudentWorkspace = () => {
           </div>
         </Modal>
 
-        <Modal title={<span className="font-black">个人中心</span>} open={showProfileModal} onCancel={() => setShowProfileModal(false)} footer={null} centered width={400} className="premium-modal no-border-modal">
-          <div className="flex flex-col items-center py-6">
-            <Avatar size={80} className="mb-4 shadow-xl border-4 border-white" src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${localStorage.getItem('va_realname') || 'User'}`} />
-            <h3 className="mb-0">{localStorage.getItem('va_realname') || '访客'}</h3>
-            <p className="text-slate-400 font-black text-[10px] uppercase tracking-widest mt-1">ID: {localStorage.getItem('va_username') || 'Unidentified'}</p>
-            <p className="text-slate-500 font-bold text-xs">{localStorage.getItem('va_school') || '所属机构/学院'}</p>
-            <Button danger block className="mt-8 h-12 rounded-2xl font-black shadow-lg shadow-red-50" onClick={() => { localStorage.clear(); window.location.reload(); }}>安全退出</Button>
-          </div>
-        </Modal>
+        <UserProfileModal 
+          visible={showProfileModal} 
+          onCancel={() => setShowProfileModal(false)} 
+          username={localStorage.getItem('va_username') || 'student'} 
+        />
       </div>
     </ConfigProvider>
   );
