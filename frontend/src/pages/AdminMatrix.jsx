@@ -309,57 +309,49 @@ const AdminMatrix = () => {
 
           {activeTab === 'sqlite' && (
             <div className="animate-in fade-in slide-in-from-bottom-5 duration-500">
-               <Row gutter={24}>
-                  <Col span={6}>
-                    <Card className="rounded-[40px] border-none shadow-2xl shadow-indigo-500/10 p-6 h-[calc(100vh-160px)] flex flex-col">
-                       <h3 className="text-sm font-black text-slate-700 uppercase tracking-widest mb-6 px-4 flex items-center gap-2">
-                          <DatabaseOutlined className="text-emerald-500" /> 数据库表清单
-                       </h3>
-                       <div className="flex-1 overflow-auto space-y-2 pr-2">
-                          {sqliteTables.map(name => (
-                             <div 
-                                key={name}
-                                onClick={() => handleTableSelect(name)}
-                                className={`p-4 rounded-3xl cursor-pointer transition-all border-2 ${
-                                   selectedTable === name 
-                                   ? 'bg-indigo-600 border-indigo-600 text-white shadow-xl shadow-indigo-200' 
-                                   : 'bg-slate-50 border-transparent hover:border-indigo-100 text-slate-600'
-                                }`}
-                             >
-                                <div className="flex items-center justify-between">
-                                   <span className="font-mono text-xs font-bold">{name}</span>
-                                   {selectedTable === name && <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />}
-                                </div>
-                             </div>
-                          ))}
-                       </div>
-                    </Card>
-                  </Col>
-                  <Col span={18}>
-                    <Card className="rounded-[40px] border-none shadow-2xl shadow-indigo-500/10 p-6 h-[calc(100vh-160px)] flex flex-col overflow-hidden">
-                       <div className="flex justify-between items-center mb-6 px-4">
-                          <div className="flex items-center gap-3">
-                             <div className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-black uppercase tracking-widest">Table Preview</div>
-                             <h3 className="text-xl font-black text-slate-800 m-0">{selectedTable || '请选择表'}</h3>
-                          </div>
-                          <Tag color="cyan" className="rounded-full px-4 border-none font-bold uppercase tracking-tighter">Read Only</Tag>
-                       </div>
-                       <div className="flex-1 overflow-auto rounded-3xl border border-slate-50 bg-[#fcfdfe]">
-                          <Table 
-                             columns={tableData.columns}
-                             dataSource={tableData.data}
-                             loading={sqliteLoading}
-                             pagination={false}
-                             size="small"
-                             className="lofty-table-static"
-                             rowKey={(record, index) => index}
-                             scroll={{ x: 'max-content' }}
-                             bordered
-                          />
-                       </div>
-                    </Card>
-                  </Col>
-               </Row>
+               <Card className="rounded-[40px] border-none shadow-2xl shadow-indigo-500/10 p-8 h-[calc(100vh-160px)] flex flex-col overflow-hidden">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 px-2">
+                     <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center text-2xl text-emerald-600 shadow-inner">
+                           <DatabaseOutlined />
+                        </div>
+                        <div>
+                           <h3 className="text-xl font-black text-slate-800 m-0">SQLite 实验室</h3>
+                           <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em] mt-1">Structured Query & Data Snapshot</p>
+                        </div>
+                     </div>
+                     <div className="flex items-center gap-4 bg-slate-50 p-2 rounded-3xl border border-slate-100 w-full md:w-auto">
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-4">选择数据表:</span>
+                        <div className="w-64">
+                          <select 
+                            value={selectedTable} 
+                            onChange={(e) => handleTableSelect(e.target.value)}
+                            className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-2 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all cursor-pointer ring-offset-1"
+                          >
+                            {sqliteTables.map(name => (
+                              <option key={name} value={name}>{name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <Tag color="cyan" className="rounded-full px-4 border-none font-black uppercase tracking-tighter ml-2 bg-white text-cyan-600 shadow-sm">Read Only</Tag>
+                     </div>
+                  </div>
+                  
+                  <div className="flex-1 overflow-auto rounded-[32px] border border-slate-100 bg-[#fcfdfe] relative group">
+                     <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-400 to-indigo-500 z-10 opacity-50"></div>
+                     <Table 
+                        columns={tableData.columns}
+                        dataSource={tableData.data}
+                        loading={sqliteLoading}
+                        pagination={{ pageSize: 20, size: 'small', showSizeChanger: false }}
+                        size="small"
+                        className="lofty-table-static"
+                        rowKey={(record, index) => index}
+                        scroll={{ x: 'max-content', y: 'calc(100vh - 420px)' }}
+                        bordered={false}
+                     />
+                  </div>
+               </Card>
             </div>
           )}
         </Content>
