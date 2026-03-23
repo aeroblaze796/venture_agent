@@ -22,6 +22,7 @@ def init_db():
         college TEXT,        -- 所属书院/学院
         advisor_name TEXT,   -- 指导老师姓名
         advisor_info TEXT,   -- 指导老师简介
+        advisor_id TEXT,     -- 指导老师工号
         content TEXT,        -- 项目计划书正文 (解析后内容)
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
@@ -143,18 +144,18 @@ def init_db():
     # 插入一些初始 Mock 数据
     cursor.execute("SELECT COUNT(*) FROM projects")
     if cursor.fetchone()[0] == 0:
-        # 项目 1：归属给“张老师”
+        # 项目 1：归属给“张老师” (工号: 123456)
         cursor.execute("""
-            INSERT INTO projects (name, description, owner_id, advisor_name, college, competition) 
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, ("蘑菇基环保包装盒", "利用真菌菌丝体制作的生物可降解包装材料", "1120230571", "张老师", "智慧双创学院", "互联网+"))
+            INSERT INTO projects (name, description, owner_id, advisor_name, advisor_id, college, competition) 
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, ("蘑菇基环保包装盒", "利用真菌菌丝体制作的生物可降解包装材料", "1120230571", "张老师", "123456", "智慧双创学院", "互联网+"))
         p1_id = cursor.lastrowid
         
         # 项目 2：归属给“王老师” (用于测试联动)
         cursor.execute("""
-            INSERT INTO projects (name, description, owner_id, advisor_name, college, competition) 
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, ("二手课本流转平台", "基于校园信用的二手书循环系统", "2230440999", "王老师", "经管学院", "挑战杯"))
+            INSERT INTO projects (name, description, owner_id, advisor_name, advisor_id, college, competition) 
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, ("二手课本流转平台", "基于校园信用的二手书循环系统", "2230440999", "王老师", "654321", "经管学院", "挑战杯"))
         p2_id = cursor.lastrowid
 
         # 为项目 1 插入模拟评估数据
