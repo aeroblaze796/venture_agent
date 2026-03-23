@@ -1,6 +1,6 @@
 # VentureAgent 开发历史记录 (History.txt)
 
-## [2026-03-20] 阶段二：后端联调与数据同步重构
+## [2026-03-20] 阶段一：后端联调与数据同步重构
 
 ### 1. 修改文件清单
 - **[NEW] `backend/app/database.py`**:
@@ -43,7 +43,7 @@
 - 提供了完整的会话生命周期管理（新建、重命名、切换、删除）。
 - 后端具备了对历史消息的结构化查询能力。
 
-## [2026-03-20] 阶段二：看板全量同步、日历增强与持久化修复
+## [2026-03-20] 阶段三：看板全量同步、日历增强与持久化修复
 
 ### 1. 修改文件清单
 - **`backend/app/database.py`**:
@@ -65,7 +65,7 @@
 - 完善了 SQLite 的可视化观测手段。
 - 修复了新建会话的状态丢失问题，交互闭环更加稳固。
 
-## [2026-03-20] 阶段二：日历体验极致优化与消息中心预研
+## [2026-03-20] 阶段四：日历体验极致优化与消息中心预研
 
 ### 1. 修改文件清单
 - **`frontend/src/pages/StudentWorkspace.jsx`**:
@@ -80,13 +80,13 @@
 - 解决了日历交互的关键易用性 Bug。
 - 建立了全局消息触达的 UI 基础。
 
-## [2026-03-20] 紧急修复：白屏问题处理 (Hotfix)
+## [2026-03-20] 阶段五：紧急修复：白屏问题处理 (Hotfix)
 
 - **`frontend/src/pages/StudentWorkspace.jsx`**:
     - **加固 Header 渲染**：将 `localeData.monthsShort()` 替换为 `value.format('MMM')`。前者在某些环境下可能因 AntD/Moment 版本差异导致运行时崩溃，后者则更为稳健。
     - **优化 Select 绑定**：移除了冗余的 `String()` 转换，直接利用 `Select.Option` 的 `value` 属性进行数值匹配，提升了渲染效率与稳定性。
 
-## [2026-03-20] 阶段四与五：成员管理、3.5 栏架构与实机文件解析
+## [2026-03-20] 阶段六：成员管理、3.5 栏架构与实机文件解析
 
 ### 1. 修改文件清单
 - **`backend/app/database.py`**:
@@ -112,7 +112,7 @@
 - 实现了从“计划书导入 -> AI 解析内容 -> 结构化管理团队”的高级业务闭环。
 - 侧边栏交互感回归，符合双创项目管理的高效直觉。
 - 奠定了“以编辑器为中心”的 3.5 栏专业工作空间格局。
-## [2026-03-20] 阶段六：项目生命周期管理逻辑闭环 (CRUD)
+## [2026-03-20] 阶段七：项目生命周期管理逻辑闭环 (CRUD)
 
 ### 1. 修改文件清单
 - **`backend/app/main.py`**:
@@ -128,7 +128,7 @@
 - 保证了数据层面的强一致性，删除项目即刻清理其产生的所有冗余 DDL 与日志。
 - 交互体验对齐 AI 会话管理，保持了全站设计语言的高度统一。
 
-## [2026-03-21] 阶段三：AI 评估增强、协作展示优化与 PDF 导入加固
+## [2026-03-21] 阶段八：AI 评估增强、协作展示优化与 PDF 导入加固
 
 ### 1. 修改文件清单
 - **`backend/app/database.py`**:
@@ -147,3 +147,51 @@
 - 解决了 PDF 导入后的“格式换行”痛点。
 - 实现了“学生侧 AI 建议 -> 教师侧 AI 预警”的功能闭环。
 - 协作中心模块已具备生产环境的数据展示能力。
+
+## [2026-03-22] 阶段九：全场景个人中心 (Account Matrix) 与三端 UI 修复
+
+### 1. 修改文件清单
+- **[NEW] `frontend/src/components/UserProfileModal.jsx`**:
+    - 开发高度复用的单例个人中心组件，支持 DiceBear 动态头像、资料实时修改（学院/部门）及安全退出。
+- **`frontend/src/pages/StudentWorkspace.jsx`**:
+    - 集成 `UserProfileModal` 至左下角侧边栏头像触发器。
+    - **UI 大一统**: 侧边栏底部新增符合管理员端样式的“安全退出系统”入口。
+- **`frontend/src/pages/TeacherDashboard.jsx`**:
+    - 修复因组件重构导致的 React 核心挂钩 (`useState`/`useEffect`) 丢失与 JSX 标签闭合错误。
+    - 在个人信息卡片区域集成 `UserProfileModal` 触发逻辑。
+- **`frontend/src/pages/AdminMatrix.jsx`**:
+    - 修复 `SafetyOutlined` 缺失导致的白屏故障。
+    - 统一左侧导航栏底部的退出区域视觉语言。
+- **`backend/app/main.py`**:
+    - 新增 `/api/user/profile` (GET/POST) 接口，直接与 Neo4j 核心身份节点交互。
+
+### 2. 核心成果
+- 实现了全平台统一的“账户矩阵”空间，用户资料在三端实现强实时同步。
+- 完成了三端“安全退出”交互的视觉与逻辑大一统。
+- 修复了多处组件重绘造成的关键渲染树崩溃点，系统稳定性显著提升。
+
+## [2026-03-23] 阶段十：教师端 AI 审计增强、多轴评估矩阵与 GraphRAG 预研
+
+### 1. 修改文件清单
+- **`frontend/src/pages/TeacherDashboard.jsx`**:
+    - **UI 重构**: 彻底重塑项目辅导视图。
+        - 合并分散的 R1-R9 评分图表为单一的 **Comprehensive Matrix (雷达图)**。
+        - 新增 **Instructor-Only Expert Audit** 的沉浸式深色文本报告区。
+        - 升级 **Teaching Intervention** (教学干预) 为 3.5 栏逻辑，支持即时指令下发。
+    - **逻辑增强**: 为审计刷新按钮增加 `Spin` 状态，并修复 `EditOutlined` 等图标组件的引用风险。
+- **`backend/app/database.py`**:
+    - **数据加固**:
+        - 为 `project_assessments` 表新增 `UNIQUE(project_id)` 约束。
+        - 修改 Mock 数据，为项目显式绑定 `advisor_id` (123456)，解决“张老师”登录后看不到名下项目的 Bug。
+- **`backend/app/main.py`**:
+    - **审计流优化**: 
+        - 重写 `trigger_ai_audit` 的 Prompt。基于 **H原则与 R 结构** 模型，生成针对指导老师的深度逻辑穿透报告。
+        - 引入 `ON CONFLICT` 更新机制，实现审计结果的原子性覆盖与即时同步。
+- **[NEW] `backend/inspect_neo4j.py`**: (临时工具)
+    - 图谱探测：识别出数据库中存量的 `Value_Loop`、`Market` 和 `Technology` 节点拓扑，为后续集成 GraphRAG 打下基础。
+
+### 2. 核心成果
+- 教师端进化为具备“穿透式逻辑诊断”能力的专业分析中心。
+- 解决了多端数据关联不一致（Null Name / Missing Project）的历史遗留问题。
+- 完成了全栈服务的路径对齐与高性能启动校验。
+- 确立了基于 GraphRAG 的下一阶段算法演进路线。
