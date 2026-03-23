@@ -17,5 +17,7 @@ python-dotenv>=1.0.0,<2.0.0
 neo4j>=5.14.0,<6.0.0
 # 用于在大模型中构建知识图谱结构的辅助提取模块
 langchain-experimental>=0.0.60
-# 用于解析 PDF 格式的商业计划书原始材料
+# 用于解析 PDF/DOCX 格式的商业计划书及上传材料
 pypdf>=4.0.0
+python-docx>=1.1.0
+python-multipart>=0.0.9

@@ -152,37 +152,37 @@ def on_startup():
     init_db()
     migrate_db()
     
-    # 注入 Mock 教师用户到账户库 (同步更新 username 与 real_name)
-    from app.ingestion.db_config import db
-    try:
-        # T001 对应 张老师
-        db.execute_query("MERGE (u:User {username: 'T001'}) SET u.password = '123456', u.role = 'teacher', u.real_name = '张老师', u.college = '智慧双创学院'")
-        # T002 对应 王老师
-        db.execute_query("MERGE (u:User {username: 'T002'}) SET u.password = '123456', u.role = 'teacher', u.real_name = '王老师', u.college = '经管学院'")
+    # # 注入 Mock 教师用户到账户库 (同步更新 username 与 real_name)
+    # from app.ingestion.db_config import db
+    # try:
+    #     # T001 对应 张老师
+    #     db.execute_query("MERGE (u:User {username: 'T001'}) SET u.password = '123456', u.role = 'teacher', u.real_name = '张老师', u.college = '智慧双创学院'")
+    #     # T002 对应 王老师
+    #     db.execute_query("MERGE (u:User {username: 'T002'}) SET u.password = '123456', u.role = 'teacher', u.real_name = '王老师', u.college = '经管学院'")
         
-        # 为了兼容用户可能的输入习惯，也确保 '张老师' 这个 username 有 real_name 自指
-        db.execute_query("MERGE (u:User {username: '张老师'}) SET u.password = '123456', u.role = 'teacher', u.real_name = '张老师', u.college = '智慧双创学院'")
+    #     # 为了兼容用户可能的输入习惯，也确保 '张老师' 这个 username 有 real_name 自指
+    #     db.execute_query("MERGE (u:User {username: '张老师'}) SET u.password = '123456', u.role = 'teacher', u.real_name = '张老师', u.college = '智慧双创学院'")
 
-        # 注入 Mock 管理员用户
-        db.execute_query("MERGE (u:User {username: 'admin'}) SET u.password = 'admin123', u.role = 'admin', u.real_name = '超级管理员', u.college = '校级管理中心'")
-        db.execute_query("MERGE (u:User {username: '001'}) SET u.password = '123456', u.role = 'admin', u.real_name = '管理员001', u.college = '系统维护部'")
-    except Exception as e:
-        print(f"Mock Teacher Injection failed (Neo4j possibly down): {e}")
+    #     # 注入 Mock 管理员用户
+    #     db.execute_query("MERGE (u:User {username: 'admin'}) SET u.password = 'admin123', u.role = 'admin', u.real_name = '超级管理员', u.college = '校级管理中心'")
+    #     db.execute_query("MERGE (u:User {username: '001'}) SET u.password = '123456', u.role = 'admin', u.real_name = '管理员001', u.college = '系统维护部'")
+    # except Exception as e:
+    #     print(f"Mock Teacher Injection failed (Neo4j possibly down): {e}")
 
-    # --- SQLite 数据对齐逻辑：将 advisor_name 映射回已知的 advisor_id ---
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        # 兼容性回填：同时支持 T001 和直接使用姓名作为 ID 的情况
-        cursor.execute("UPDATE projects SET advisor_id = 'T001' WHERE advisor_name = '张老师'")
-        cursor.execute("UPDATE projects SET advisor_id = '张老师' WHERE advisor_name = '张老师'") 
-        cursor.execute("UPDATE projects SET advisor_id = 'T002' WHERE advisor_name = '王老师'")
-        cursor.execute("UPDATE projects SET advisor_id = '王老师' WHERE advisor_name = '王老师'")
-        conn.commit()
-        conn.close()
-        print("DEBUG: SQLite advisor_id comprehensive backfill completed.")
-    except Exception as e:
-        print(f"SQLite backfill failed: {e}")
+    # # --- SQLite 数据对齐逻辑：将 advisor_name 映射回已知的 advisor_id ---
+    # try:
+    #     conn = sqlite3.connect(DB_PATH)
+    #     cursor = conn.cursor()
+    #     # 兼容性回填：同时支持 T001 和直接使用姓名作为 ID 的情况
+    #     cursor.execute("UPDATE projects SET advisor_id = 'T001' WHERE advisor_name = '张老师'")
+    #     cursor.execute("UPDATE projects SET advisor_id = '张老师' WHERE advisor_name = '张老师'") 
+    #     cursor.execute("UPDATE projects SET advisor_id = 'T002' WHERE advisor_name = '王老师'")
+    #     cursor.execute("UPDATE projects SET advisor_id = '王老师' WHERE advisor_name = '王老师'")
+    #     conn.commit()
+    #     conn.close()
+    #     print("DEBUG: SQLite advisor_id comprehensive backfill completed.")
+    # except Exception as e:
+    #     print(f"SQLite backfill failed: {e}")
 
 @app.get("/")
 def read_root():
@@ -238,9 +238,10 @@ def chat_endpoint(request: ChatRequest):
 
     input_message = HumanMessage(content=final_input_content)
     initial_state = {"messages": [input_message], "next_agent": ""}
-    config = {"configurable": {"thread_id": request.session_id}}
+    session_id = request.session_id or "default_session_123"
+    config = {"configurable": {"thread_id": session_id}}
     
-    save_message(request.session_id, "user", request.message)
+    save_message(session_id, "user", request.message)
     final_state = app_graph.invoke(initial_state, config=config)
     
     messages = final_state.get("messages", [])
@@ -253,8 +254,12 @@ def chat_endpoint(request: ChatRequest):
         "unknown": "系统导师"
     }
     display_name = agent_map.get(agent_id, "系统导师")
-    save_message(request.session_id, "coach", final_reply, display_name)
-    return ChatResponse(reply=final_reply, agent=display_name)
+    
+    if isinstance(final_reply, list):
+        final_reply = "".join(str(part) for part in final_reply)
+        
+    save_message(session_id, "coach", str(final_reply), display_name)
+    return ChatResponse(reply=str(final_reply), agent=display_name)
 
 @app.post("/api/projects")
 async def create_project_endpoint(project: ProjectCreateRequest):
@@ -328,7 +333,7 @@ async def create_project_endpoint(project: ProjectCreateRequest):
 @app.post("/api/projects/import")
 async def import_project_file(file: UploadFile = File(...), project_id: Optional[int] = Form(None)):
     content = ""
-    filename = file.filename
+    filename = file.filename or "unknown_file"
     unique_filename = f"{uuid.uuid4().hex}_{filename}"
     upload_path = os.path.join(UPLOAD_DIR, unique_filename)
     
@@ -352,11 +357,17 @@ async def import_project_file(file: UploadFile = File(...), project_id: Optional
     except Exception as e:
         return {"error": f"Failed to parse file: {str(e)}"}
     
+    # 强制清理：移除文档中解析出来的非法/游离 surrogate characters (如 \ud835 等) 防止 JSON 序列化崩溃
+    import re
+    content = re.sub(r'[\ud800-\udfff]', '', content)
+    
     if project_id is not None:
         conn = sqlite3.connect(DB_PATH)
         cur = conn.cursor()
         cur.execute("INSERT INTO project_files (project_id, filename, file_url) VALUES (?, ?, ?)", (project_id, filename, file_url))
         file_id = cur.lastrowid
+        # 新增逻辑：将提取出来的文本作为项目的正文直接写进数据库中，大模型才能在下一步审计时看到内容并提取 evidence_trace
+        cur.execute("UPDATE projects SET content = ? WHERE id = ?", (content, project_id))
         conn.commit()
         conn.close()
         # 自动触发一次后台审计 (异步化非阻塞)
@@ -555,12 +566,40 @@ async def get_teacher_dashboard(teacher_id: str):
     student_count = cursor.fetchone()['student_count'] or 0
     
     # 统计高频错误 (基于 H 原则)
-    # 此处为简化逻辑：从所有的总结中提取带有 H 的标签，或基于 mock
-    top_mistakes = [
-        {"name": "H8 单位经济不成立", "count": 2, "desc": "盈利预期缺乏数据支撑"},
-        {"name": "H1 价值主张错位", "count": 1, "desc": "用户痛点定义过于模糊"},
-        {"name": "H6 竞争壁垒薄弱", "count": 1, "desc": "容易被大厂快速复制"}
-    ]
+    cursor.execute("""
+        SELECT audit_summary
+        FROM project_assessments pa
+        JOIN projects p ON pa.project_id = p.id
+        WHERE p.advisor_id = ? AND pa.audit_summary IS NOT NULL
+    """, (teacher_id,))
+    summaries = [row['audit_summary'] for row in cursor.fetchall() if row['audit_summary']]
+    
+    import re
+    from collections import Counter
+    h_pattern = re.compile(r'(H[1-9])')
+    h_counts = Counter()
+    for summary in summaries:
+        found_tags = set(h_pattern.findall(summary))
+        for tag in found_tags:
+            h_counts[tag] += 1
+            
+    h_desc_map = {
+        "H1": "价值主张错位", "H2": "用户细分错误", "H3": "痛点假设不成立", 
+        "H4": "市场规模幻觉", "H5": "缺乏可行性验证", "H6": "竞争壁垒薄弱", 
+        "H7": "推广渠道错位", "H8": "单位经济不成立", "H9": "团队资源错配"
+    }
+    
+    top_mistakes = []
+    for tag, count in h_counts.most_common(5):
+        top_mistakes.append({
+            "name": f"{tag} {h_desc_map.get(tag, '未定义原则')}",
+            "count": count,
+            "desc": f"在{count}个项目中出现该原则报错"
+        })
+    if not top_mistakes:
+        top_mistakes = [
+            {"name": "暂无高频错误", "count": 0, "desc": "当前暂无风险预警项目"}
+        ]
     
     conn.close()
     return {
@@ -610,7 +649,10 @@ async def trigger_ai_audit(project_id: int):
         response = llm.invoke(prompt)
         import json
         # 尝试解析 JSON
-        raw_text = response.content.strip()
+        raw_text = response.content
+        if isinstance(raw_text, list):
+            raw_text = "".join(str(part) for part in raw_text)
+        raw_text = raw_text.strip()
         if "```json" in raw_text:
             raw_text = raw_text.split("```json")[1].split("```")[0].strip()
         
@@ -618,21 +660,22 @@ async def trigger_ai_audit(project_id: int):
         
         # 保存到数据库
         cursor.execute("""
-            INSERT INTO project_assessments (project_id, r1_score, r2_score, r3_score, r4_score, r5_score, r6_score, r7_score, r8_score, r9_score, overall_risk, audit_summary)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO project_assessments (project_id, r1_score, r2_score, r3_score, r4_score, r5_score, r6_score, r7_score, r8_score, r9_score, overall_risk, audit_summary, evidence_trace)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(project_id) DO UPDATE SET
                 r1_score=excluded.r1_score, r2_score=excluded.r2_score, 
                 r3_score=excluded.r3_score, r4_score=excluded.r4_score,
                 r5_score=excluded.r5_score, r6_score=excluded.r6_score,
                 r7_score=excluded.r7_score, r8_score=excluded.r8_score,
                 r9_score=excluded.r9_score, overall_risk=excluded.overall_risk,
-                audit_summary=excluded.audit_summary
+                audit_summary=excluded.audit_summary, evidence_trace=excluded.evidence_trace
         """, (
             project_id, res_data.get('r1', 0), res_data.get('r2', 0), 
             res_data.get('r3', 0), res_data.get('r4', 0), res_data.get('r5', 0),
             res_data.get('r6', 0), res_data.get('r7', 0),
             res_data.get('r8', 0), res_data.get('r9', 0),
-            res_data.get('overall_risk', 'Medium'), res_data.get('audit_summary', '')
+            res_data.get('overall_risk', 'Medium'), res_data.get('audit_summary', ''),
+            res_data.get('evidence_trace', '')
         ))
         conn.commit()
     except Exception as e:
@@ -678,7 +721,108 @@ async def create_teacher_intervention(project_id: int, teacher_name: str, conten
 
 @app.get("/api/teacher/intervention-generator")
 async def generate_teaching_plan(teacher_name: str):
-    return {"plan": f"建议针对您名下的项目开展一次【商业模式一致性】专项辅导。"}
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT p.name, pa.audit_summary 
+        FROM projects p
+        JOIN project_assessments pa ON p.id = pa.project_id
+        WHERE p.advisor_name = ? OR p.advisor_id = ?
+    """, (teacher_name, teacher_name))
+    records = cursor.fetchall()
+    conn.close()
+    
+    if not records:
+        return {"plan": "该教师名下暂无项目评估数据，无法生成针对性教学计划。"}
+        
+    summaries_text = "\\n".join([f"项目[{r['name']}]: {r['audit_summary']}" for r in records if r['audit_summary']])
+    if not summaries_text.strip():
+        return {"plan": "该教师名下项目的评估数据为空，无法生成计划。"}
+    
+    try:
+        from app.agent.graph import get_llm
+        llm = get_llm()
+        prompt = f"""你是一个高校创新创业教研主任。以下是【{teacher_name}】老师名下学生项目最近的AI诊断总结：
+{summaries_text}
+
+请你根据这些共性错误，生成一份【下周教学干预计划】。要求：
+1. 聚焦最高频的1-2个核心谬误。
+2. 给出具体的单节课教学安排（例如：理论课讲什么模型，实践课布置什么沙盘任务）。
+3. 语气要像专业的教导总结，总字数不要超过300字。
+"""
+        response = llm.invoke(prompt)
+        return {"plan": response.content}
+    except Exception as e:
+        return {"plan": f"系统生成教学计划失败：{str(e)}"}
+
+@app.get("/api/teacher/projects/{project_id}/capability_profile")
+async def generate_capability_profile(project_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("SELECT owner_id, name FROM projects WHERE id = ?", (project_id,))
+    proj = cursor.fetchone()
+    if not proj:
+        conn.close()
+        return {"error": "项目不存在"}
+        
+    owner_id = proj["owner_id"]
+    proj_name = proj["name"]
+    
+    cursor.execute("""
+        SELECT role, content as text
+        FROM messages 
+        WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = ?)
+        ORDER BY timestamp DESC LIMIT 6
+    """, (owner_id,))
+    messages_raw = cursor.fetchall()
+    conn.close()
+    
+    if len(messages_raw) < 2:
+        return {"error": "对话记录过少，无法生成三轮互动能力画像。请鼓励学生多使用系统。"}
+        
+    messages_raw.reverse()
+    chat_log = ""
+    for idx, m in enumerate(messages_raw):
+        prefix = "学生" if m["role"] == "user" else "AI导师"
+        chat_log += f"[{idx+1}] {prefix}: {m['text']}\\n"
+        
+    try:
+        from app.agent.graph import get_llm
+        llm = get_llm()
+        prompt = f"""你是一个高级商业教练。以下是负责【{proj_name}】项目的学生与AI导师近期的对抗对话记录：
+{chat_log}
+
+请基于这些对话行为，生成格式化的【学生能力画像评估报告】。请严格输出 JSON！格式如下：
+{{
+    "scores": {{
+        "empathy": 1到5的整数(痛点发现能力),
+        "ideation": 1到5的整数(方案策划能力),
+        "business": 1到5的整数(商业建模能力),
+        "execution": 1到5的整数(资源杠杆能力),
+        "logic": 1到5的整数(逻辑表达能力)
+    }},
+    "round_diagnostics": [
+        "第一轮表现：...（必须引用至少一句对话日志中的学生原话来作为证据支撑）",
+        "第二轮表现：...（必须引用至少一句原话）",
+        "综合表现评价：...（总结）"
+    ]
+}}
+"""
+        response = llm.invoke(prompt)
+        import json
+        raw_text = response.content
+        if isinstance(raw_text, list):
+            raw_text = "".join(str(part) for part in raw_text)
+        raw_text = raw_text.strip()
+        if "```json" in raw_text:
+            raw_text = raw_text.split("```json")[1].split("```")[0].strip()
+        result = json.loads(raw_text)
+        return {"status": "ok", "profile": result}
+    except Exception as e:
+        print(f"Failed to generate capability profile: {e}")
+        return {"error": f"由于系统或网络异常，生成画像评估失败 ({str(e)})"}
 
 # --- Admin Endpoints ---
 

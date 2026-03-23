@@ -425,7 +425,15 @@ export default function TeacherDashboard() {
                              <div className="text-lg leading-relaxed font-semibold text-slate-100 italic">
                                "{projectDetail?.assessment?.audit_summary || '暂无深度审计报告。作为指导老师，您可以点击下方按钮启动 Agent 对项目底层逻辑的穿透式审计。评分与报告将基于 H 原则与 R 体系自动生成。'}"
                              </div>
-                             <div className="absolute top-4 right-6 text-4xl text-white/10 opacity-50 font-serif">“</div>
+                             {projectDetail?.assessment?.evidence_trace && (
+                               <div className="mt-6 pt-6 border-t border-white/10 z-20 relative">
+                                 <p className="text-xs text-emerald-400 font-bold mb-3 flex items-center gap-2 uppercase tracking-widest"><FileSearchOutlined /> 漏洞原文溯源 (Evidence Trace)</p>
+                                 <div className="text-sm text-slate-300 bg-black/30 p-5 rounded-2xl font-mono leading-relaxed border border-white/5 shadow-inner">
+                                   {projectDetail.assessment.evidence_trace}
+                                 </div>
+                               </div>
+                             )}
+                             <div className="absolute top-4 right-6 text-4xl text-white/10 opacity-50 font-serif z-0">“</div>
                           </div>
 
                           <div className="pt-6 border-t border-white/5 flex items-center justify-between">

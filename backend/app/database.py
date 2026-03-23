@@ -82,6 +82,7 @@ def init_db():
         project_id INTEGER,
         name TEXT NOT NULL,
         student_id TEXT,    -- 学号
+        role TEXT,          -- 身份/角色
         position TEXT,      -- 职务
         college TEXT,       -- 学院
         major TEXT,         -- 专业
@@ -112,6 +113,7 @@ def init_db():
         r6_score REAL, r7_score REAL, r8_score REAL, r9_score REAL,
         overall_risk TEXT,
         audit_summary TEXT,
+        evidence_trace TEXT,
         FOREIGN KEY (project_id) REFERENCES projects(id)
     )
     """)
@@ -141,34 +143,34 @@ def init_db():
     )
     """)
 
-    # 插入一些初始 Mock 数据
-    cursor.execute("SELECT COUNT(*) FROM projects")
-    if cursor.fetchone()[0] == 0:
-        # 项目 1：归属给“张老师” (工号: 123456)
-        cursor.execute("""
-            INSERT INTO projects (name, description, owner_id, advisor_name, advisor_id, college, competition) 
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, ("蘑菇基环保包装盒", "利用真菌菌丝体制作的生物可降解包装材料", "1120230571", "张老师", "123456", "智慧双创学院", "互联网+"))
-        p1_id = cursor.lastrowid
+    # # 插入一些初始 Mock 数据
+    # cursor.execute("SELECT COUNT(*) FROM projects")
+    # if cursor.fetchone()[0] == 0:
+    #     # 项目 1：归属给“张老师” (工号: 123456)
+    #     cursor.execute("""
+    #         INSERT INTO projects (name, description, owner_id, advisor_name, advisor_id, college, competition) 
+    #         VALUES (?, ?, ?, ?, ?, ?, ?)
+    #     """, ("蘑菇基环保包装盒", "利用真菌菌丝体制作的生物可降解包装材料", "1120230571", "张老师", "123456", "智慧双创学院", "互联网+"))
+    #     p1_id = cursor.lastrowid
         
-        # 项目 2：归属给“王老师” (用于测试联动)
-        cursor.execute("""
-            INSERT INTO projects (name, description, owner_id, advisor_name, advisor_id, college, competition) 
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, ("二手课本流转平台", "基于校园信用的二手书循环系统", "2230440999", "王老师", "654321", "经管学院", "挑战杯"))
-        p2_id = cursor.lastrowid
+    #     # 项目 2：归属给“王老师” (用于测试联动)
+    #     cursor.execute("""
+    #         INSERT INTO projects (name, description, owner_id, advisor_name, advisor_id, college, competition) 
+    #         VALUES (?, ?, ?, ?, ?, ?, ?)
+    #     """, ("二手课本流转平台", "基于校园信用的二手书循环系统", "2230440999", "王老师", "654321", "经管学院", "挑战杯"))
+    #     p2_id = cursor.lastrowid
 
-        # 为项目 1 插入模拟评估数据
-        cursor.execute("""
-            INSERT INTO project_assessments (project_id, r1_score, r2_score, r3_score, r4_score, r5_score, r6_score, r7_score, r8_score, r9_score, overall_risk, audit_summary)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (p1_id, 4.5, 4.0, 3.5, 3.0, 4.0, 2.5, 4.0, 5.0, 4.5, "Medium", "技术路线清晰，但财务模型中 LTV/CAC 比率偏低，建议加强盈利点深度。"))
+    #     # 为项目 1 插入模拟评估数据
+    #     cursor.execute("""
+    #         INSERT INTO project_assessments (project_id, r1_score, r2_score, r3_score, r4_score, r5_score, r6_score, r7_score, r8_score, r9_score, overall_risk, audit_summary, evidence_trace)
+    #         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    #     """, (p1_id, 4.5, 4.0, 3.5, 3.0, 4.0, 2.5, 4.0, 5.0, 4.5, "Medium", "技术路线清晰，但财务模型中 LTV/CAC 比率偏低，建议加强盈利点深度。", "原文：『我们采用环保材料...』"))
 
-        # 为项目 2 插入高危评估数据
-        cursor.execute("""
-            INSERT INTO project_assessments (project_id, r1_score, r2_score, r3_score, r4_score, r5_score, r6_score, r7_score, r8_score, r9_score, overall_risk, audit_summary)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (p2_id, 2.0, 1.5, 4.0, 2.0, 3.0, 1.0, 2.0, 3.0, 3.0, "High", "严重缺乏真实用户访谈证据，且单位经济模型不成立。"))
+    #     # 为项目 2 插入高危评估数据
+    #     cursor.execute("""
+    #         INSERT INTO project_assessments (project_id, r1_score, r2_score, r3_score, r4_score, r5_score, r6_score, r7_score, r8_score, r9_score, overall_risk, audit_summary, evidence_trace)
+    #         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    #     """, (p2_id, 2.0, 1.5, 4.0, 2.0, 3.0, 1.0, 2.0, 3.0, 3.0, "High", "严重缺乏真实用户访谈证据，且单位经济模型不成立。", "原文：『预计第一个月盈利100万』"))
 
     conn.commit()
     conn.close()
@@ -194,9 +196,14 @@ def migrate_db():
     # 更新 members 表 (平滑迁移)
     cursor.execute("PRAGMA table_info(members)")
     mem_cols = [row[1] for row in cursor.fetchall()]
-    for col_name, col_type in [("student_id", "TEXT"), ("college", "TEXT"), ("major", "TEXT"), ("grade", "TEXT")]:
+    for col_name, col_type in [("student_id", "TEXT"), ("role", "TEXT"), ("college", "TEXT"), ("major", "TEXT"), ("grade", "TEXT")]:
         if col_name not in mem_cols:
             cursor.execute(f"ALTER TABLE members ADD COLUMN {col_name} {col_type}")
+            
+    # 更新 project_assessments 表 
+    cursor.execute("PRAGMA table_info(project_assessments)")
+    if "evidence_trace" not in [row[1] for row in cursor.fetchall()]:
+        cursor.execute("ALTER TABLE project_assessments ADD COLUMN evidence_trace TEXT")
 
     # 创建项目日志表
     cursor.execute("""
