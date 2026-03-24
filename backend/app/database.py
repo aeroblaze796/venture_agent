@@ -138,6 +138,7 @@ def init_db():
         project_id INTEGER,
         filename TEXT NOT NULL,
         file_url TEXT NOT NULL,
+        content TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (project_id) REFERENCES projects(id)
     )
@@ -216,6 +217,12 @@ def migrate_db():
         FOREIGN KEY (project_id) REFERENCES projects(id)
     )
     """)
+
+    # 为项目文件补充 content 字段，用于保存每个文件各自解析出的正文
+    cursor.execute("PRAGMA table_info(project_files)")
+    if "content" not in [row[1] for row in cursor.fetchall()]:
+        cursor.execute("ALTER TABLE project_files ADD COLUMN content TEXT")
+
     conn.commit()
     conn.close()
 

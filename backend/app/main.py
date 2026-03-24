@@ -8,9 +8,8 @@ import shutil
 import uuid
 import sqlite3
 import datetime
-import asyncio
-from typing import Optional, List
-from pydantic import BaseModel
+from typing import Optional, List, Literal
+from pydantic import BaseModel, Field
 print(f"DEBUG: main.py loaded from {os.path.abspath(__file__)}")
 
 # 导入本地模块
@@ -144,6 +143,102 @@ class ReviewRequest(BaseModel):
 
 class UpdateContentRequest(BaseModel):
     content: str
+    file_id: Optional[int] = None
+
+class AuditResult(BaseModel):
+    r1: float = Field(description="R1 问题定义评分，1 到 5")
+    r2: float = Field(description="R2 用户证据强度评分，1 到 5")
+    r3: float = Field(description="R3 方案可行性评分，1 到 5")
+    r4: float = Field(description="R4 商业模式一致性评分，1 到 5")
+    r5: float = Field(description="R5 市场与竞争评分，1 到 5")
+    r6: float = Field(description="R6 财务健康逻辑评分，1 到 5")
+    r7: float = Field(description="R7 创新与差异化评分，1 到 5")
+    r8: float = Field(description="R8 团队与执行力评分，1 到 5")
+    r9: float = Field(description="R9 表达与材料质量评分，1 到 5")
+    overall_risk: Literal["High", "Medium", "Low"] = Field(description="总体风险评级")
+    audit_summary: str = Field(description="给指导老师看的深度审计结论，150字以内")
+    evidence_trace: str = Field(description="必须引用项目原文中的1到3处关键片段作为证据，说明这些原文为什么支撑上述判断。")
+
+def extract_h_principles(*texts: str) -> list[str]:
+    """
+    从审计文本中提取 H 原则标签。
+    优先识别显式的 H1-H9 标签；若历史数据未输出标签，则使用关键词兜底推断。
+    """
+    import re
+
+    combined_text = "\n".join(text for text in texts if text)
+    if not combined_text.strip():
+        return []
+
+    explicit_tags = []
+    seen = set()
+    for tag in re.findall(r"(H[1-9])", combined_text):
+        if tag not in seen:
+            explicit_tags.append(tag)
+            seen.add(tag)
+    if explicit_tags:
+        return explicit_tags
+
+    keyword_map = {
+        "H1": ["价值主张错位", "定位混乱", "内容脱节", "标题与内容", "项目定位", "概念混淆", "套壳", "错位"],
+        "H2": ["用户细分错误", "目标用户过宽", "用户画像不清", "客户群体过宽", "用户细分"],
+        "H3": ["痛点假设", "伪需求", "痛点不明确", "需求不强", "需求存疑"],
+        "H4": ["市场规模", "百亿市场", "市场空间", "规模推断", "市场过大"],
+        "H5": ["缺乏验证", "用户调研", "市场验证", "小规模测试", "验证数据", "可行性验证", "反馈不足"],
+        "H6": ["竞争壁垒", "壁垒薄弱", "仅依赖专利", "缺乏壁垒", "护城河", "商业化验证不足"],
+        "H7": ["推广渠道", "渠道错位", "获客渠道", "渠道策略", "推广路径"],
+        "H8": ["单位经济", "收入模型", "财务预测", "获客成本", "毛利", "盈利模型", "LTV", "CAC", "计算依据", "营收逻辑", "成本结构"],
+        "H9": ["团队资源", "资源错配", "执行力不足", "团队能力", "核心成员缺失"],
+    }
+
+    inferred_tags = []
+    for tag, keywords in keyword_map.items():
+        if any(keyword in combined_text for keyword in keywords):
+            inferred_tags.append(tag)
+    return inferred_tags
+
+def resolve_project_audit_context(project_id: int):
+    """
+    解析教师审计与学生手动评审所依赖的项目正文。
+    优先使用最近一次上传文件的 content；若不存在，则回退到 projects.content。
+    """
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("SELECT id, name, content, competition FROM projects WHERE id = ?", (project_id,))
+        project = cursor.fetchone()
+        if not project:
+            return None
+
+        cursor.execute("""
+            SELECT id, filename, content, created_at
+            FROM project_files
+            WHERE project_id = ?
+            ORDER BY datetime(created_at) DESC, id DESC
+            LIMIT 1
+        """, (project_id,))
+        latest_file = cursor.fetchone()
+
+        latest_file_content = ""
+        latest_file_name = None
+        if latest_file:
+            latest_file_content = (latest_file["content"] or "").strip()
+            latest_file_name = latest_file["filename"]
+
+        project_content = (project["content"] or "").strip()
+        resolved_content = latest_file_content or project_content
+
+        return {
+            "project_id": project["id"],
+            "name": project["name"],
+            "competition": project["competition"],
+            "content": resolved_content,
+            "content_source": latest_file_name or "项目正文",
+        }
+    finally:
+        conn.close()
 
 # --- Endpoints ---
 
@@ -364,18 +459,13 @@ async def import_project_file(file: UploadFile = File(...), project_id: Optional
     if project_id is not None:
         conn = sqlite3.connect(DB_PATH)
         cur = conn.cursor()
-        cur.execute("INSERT INTO project_files (project_id, filename, file_url) VALUES (?, ?, ?)", (project_id, filename, file_url))
+        cur.execute(
+            "INSERT INTO project_files (project_id, filename, file_url, content) VALUES (?, ?, ?, ?)",
+            (project_id, filename, file_url, content)
+        )
         file_id = cur.lastrowid
-        # 新增逻辑：将提取出来的文本作为项目的正文直接写进数据库中，大模型才能在下一步审计时看到内容并提取 evidence_trace
-        cur.execute("UPDATE projects SET content = ? WHERE id = ?", (content, project_id))
         conn.commit()
         conn.close()
-        # 自动触发一次后台审计 (异步化非阻塞)
-        if project_id:
-            try:
-                import threading
-                threading.Thread(target=lambda: asyncio.run(trigger_ai_audit(project_id)), daemon=True).start()
-            except: pass
 
         return {"status": "ok", "text": content, "filename": filename, "file_id": file_id, "file_url": f"/api/uploads/{unique_filename}"}
 
@@ -384,7 +474,12 @@ def get_project_files(project_id: int):
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
-    cursor.execute("SELECT id, filename, file_url FROM project_files WHERE project_id = ?", (project_id,))
+    cursor.execute("""
+        SELECT id, filename, file_url, created_at
+        FROM project_files
+        WHERE project_id = ?
+        ORDER BY datetime(created_at) DESC, id DESC
+    """, (project_id,))
     rows = cursor.fetchall()
     conn.close()
     return [dict(row) for row in rows]
@@ -394,10 +489,16 @@ async def get_project_file_content(project_id: int, file_id: int):
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
-    cursor.execute("SELECT id, filename, file_url FROM project_files WHERE id = ? AND project_id = ?", (file_id, project_id))
+    cursor.execute("SELECT id, filename, file_url, content FROM project_files WHERE id = ? AND project_id = ?", (file_id, project_id))
     row = cursor.fetchone()
-    conn.close()
-    if not row: return {"error": "File not found"}
+    if not row:
+        conn.close()
+        return {"error": "File not found"}
+
+    stored_content = (row["content"] or "").strip()
+    if stored_content:
+        conn.close()
+        return {"id": file_id, "filename": row["filename"], "content": row["content"]}
     
     file_url = row["file_url"]
     filename = row["filename"]
@@ -418,6 +519,11 @@ async def get_project_file_content(project_id: int, file_id: int):
             content = "Non-previewable file type."
     except Exception as e:
         content = f"Error reading file: {str(e)}"
+    else:
+        # 为历史文件做惰性回填，后续审计与预览统一走数据库中的 content
+        cursor.execute("UPDATE project_files SET content = ? WHERE id = ? AND project_id = ?", (content, file_id, project_id))
+        conn.commit()
+    conn.close()
     return {"id": file_id, "filename": filename, "content": content}
 
 @app.delete("/api/project-files/{file_id}")
@@ -453,13 +559,12 @@ def create_commit(project_id: int, request: CommitRequest):
 
 @app.post("/api/projects/{project_id}/review")
 def review_project(project_id: int, request: ReviewRequest):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT name, content FROM projects WHERE id = ?", (project_id,))
-    row = cursor.fetchone()
-    conn.close()
-    if not row: return {"review": "项目未找到或正文为空。"}
-    project_name, project_content = row
+    audit_context = resolve_project_audit_context(project_id)
+    if not audit_context:
+        return {"review": "项目未找到或正文为空。"}
+
+    project_name = audit_context["name"]
+    project_content = audit_context["content"]
     if not project_content or len(project_content.strip()) < 10:
         return {"review": "项目正文内容太少，AI 无法进行深度评估。请先在编辑器中补充内容。"}
 
@@ -478,7 +583,13 @@ def review_project(project_id: int, request: ReviewRequest):
 def update_project_content(project_id: int, request: UpdateContentRequest):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("UPDATE projects SET content = ? WHERE id = ?", (request.content, project_id))
+    if request.file_id:
+        cursor.execute(
+            "UPDATE project_files SET content = ? WHERE id = ? AND project_id = ?",
+            (request.content, request.file_id, project_id)
+        )
+    else:
+        cursor.execute("UPDATE projects SET content = ? WHERE id = ?", (request.content, project_id))
     conn.commit()
     conn.close()
     return {"status": "ok"}
@@ -567,19 +678,17 @@ async def get_teacher_dashboard(teacher_id: str):
     
     # 统计高频错误 (基于 H 原则)
     cursor.execute("""
-        SELECT audit_summary
+        SELECT audit_summary, evidence_trace
         FROM project_assessments pa
         JOIN projects p ON pa.project_id = p.id
         WHERE p.advisor_id = ? AND pa.audit_summary IS NOT NULL
     """, (teacher_id,))
-    summaries = [row['audit_summary'] for row in cursor.fetchall() if row['audit_summary']]
-    
-    import re
+    assessment_rows = cursor.fetchall()
+
     from collections import Counter
-    h_pattern = re.compile(r'(H[1-9])')
     h_counts = Counter()
-    for summary in summaries:
-        found_tags = set(h_pattern.findall(summary))
+    for row in assessment_rows:
+        found_tags = set(extract_h_principles(row["audit_summary"], row["evidence_trace"]))
         for tag in found_tags:
             h_counts[tag] += 1
             
@@ -617,46 +726,54 @@ async def trigger_ai_audit(project_id: int):
     """
     触发 DeepSeek 深度审计：读取项目内容，生成 R1-R9 评分及 H 原则审计
     """
+    proj = resolve_project_audit_context(project_id)
+    if not proj:
+        raise HTTPException(status_code=404, detail="项目不存在")
+
+    if not proj["content"] or len(proj["content"].strip()) < 10:
+        raise HTTPException(status_code=400, detail="项目正文内容太少，无法执行深度审计")
+
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
-    cursor.execute("SELECT name, content, competition FROM projects WHERE id = ?", (project_id,))
-    proj = cursor.fetchone()
-    if not proj:
-        conn.close()
-        return {"error": "项目不存在"}
     
     try:
         from app.agent.graph import get_llm
         llm = get_llm()
-        
-        prompt = f"""你是一个顶级的创业大赛评委与金牌指导老师。请对以下学生的创业项目内容进行深度穿透式审计。
-        项目名称：{proj['name']}
-        项目类型：{proj['competition']}
-        项目正文：{proj['content'][:8000]} # 截断防止溢出
-        
-        你的受众是：该项目的指导教师。请以“同行评审”的专业口吻，指出该项目的底层逻辑缺陷及可能的干预路径。
-        
-        请严格按以下 JSON 格式输出评估结果（不要有其他文字）：
-        {{
-            "r1": 评分1-5, "r2": 评分1-5, "r3": 评分1-5, "r4": 评分1-5, "r5": 评分1-5,
-            "r6": 评分1-5, "r7": 评分1-5, "r8": 评分1-5, "r9": 评分1-5,
-            "overall_risk": "High"/"Medium"/"Low",
-            "audit_summary": "请以资深导师身份写一段150字以内的深度审计报告。重点关注：该项目在 H 原则（H1价值错位/H8单位经济/H6竞争壁垒等）上的具体冲突，并给出给指导老师的‘一针见血’的干预建议。不要说套话。"
-        }}
-        """
-        
-        response = llm.invoke(prompt)
-        import json
-        # 尝试解析 JSON
-        raw_text = response.content
-        if isinstance(raw_text, list):
-            raw_text = "".join(str(part) for part in raw_text)
-        raw_text = raw_text.strip()
-        if "```json" in raw_text:
-            raw_text = raw_text.split("```json")[1].split("```")[0].strip()
-        
-        res_data = json.loads(raw_text)
+        structured_llm = llm.with_structured_output(AuditResult)
+
+        prompt = f"""
+你是一名创业大赛资深评委，同时也是指导教师的“教师顾问”。
+请对下面的学生项目材料做一次严格、具体、可追溯的深度审计。
+
+项目名称：{proj['name']}
+项目类型：{proj['competition']}
+项目正文：
+{proj['content'][:8000]}
+
+输出要求：
+1. 对 R1-R9 分别给出 1 到 5 分，可使用小数。
+2. overall_risk 只能是 High、Medium、Low 之一。
+3. audit_summary 面向指导教师，150 字以内，重点指出项目在核心逻辑、商业模式、竞争壁垒、单位经济性等方面最关键的问题，并给出一条最值得优先干预的建议。
+4. audit_summary 中必须显式写出 1 到 3 个最关键的 H 原则编号，例如 H1、H6、H8，建议放在开头或句中明确点出，便于后续统计高频商业逻辑盲区。
+5. evidence_trace 必须填写，且不能是空字符串。
+6. evidence_trace 必须直接引用项目原文中的 1 到 3 处关键片段，尽量保留原句或原短语，再解释这些片段为什么能支撑你的判断，做到“判卷有理有据”。
+7. 不要编造项目中没有出现过的事实；如果材料不足，就明确指出“材料缺失”本身也是证据。
+8. 只返回结构化结果，不要输出额外说明。
+"""
+
+        audit_result = structured_llm.invoke(prompt)
+        if isinstance(audit_result, AuditResult):
+            res_data = audit_result.model_dump()
+        elif isinstance(audit_result, dict):
+            res_data = audit_result
+        else:
+            raise ValueError("AI 审计结果格式异常")
+
+        evidence_trace = str(res_data.get("evidence_trace", "")).strip()
+        if not evidence_trace:
+            raise ValueError("AI 审计结果缺少 evidence_trace")
+        res_data["evidence_trace"] = evidence_trace
         
         # 保存到数据库
         cursor.execute("""
@@ -680,7 +797,7 @@ async def trigger_ai_audit(project_id: int):
         conn.commit()
     except Exception as e:
         print(f"Audit failed: {e}")
-        return {"error": f"AI 审计失败: {str(e)}"}
+        raise HTTPException(status_code=500, detail=f"AI 审计失败: {str(e)}")
     finally:
         conn.close()
     

@@ -392,7 +392,7 @@ const StudentWorkspace = () => {
     try {
       const res = await fetch(`http://localhost:8000/api/projects/${activeProjectId}/content`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content })
+        body: JSON.stringify({ content, file_id: activeFileId })
       });
       if (res.ok) {
         setSyncData(prev => ({

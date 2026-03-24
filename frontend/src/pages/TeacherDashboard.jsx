@@ -159,12 +159,15 @@ export default function TeacherDashboard() {
     setAuditLoading(true);
     try {
       const res = await fetch(`http://localhost:8000/api/teacher/projects/${projectDetail.project.id}/audit`, { method: 'POST' });
-      if (res.ok) {
-        antMessage.success("AI 深度审计完成");
-        // 重新获取详情
-        await selectProject(projectDetail.project.id);
-        await fetchDashboardData();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        antMessage.error(data.detail || data.error || "审计触发失败");
+        return;
       }
+
+      antMessage.success("AI 深度审计完成");
+      await selectProject(projectDetail.project.id);
+      await fetchDashboardData();
     } catch (e) {
       antMessage.error("审计触发失败");
     } finally {
