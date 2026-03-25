@@ -1,5 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 import pypdf
 import docx
@@ -15,6 +16,9 @@ print(f"DEBUG: main.py loaded from {os.path.abspath(__file__)}")
 # 导入本地模块
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+FRONTEND_DIST_DIR = os.path.normpath(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "frontend", "dist")
+)
 
 from app.auth import auth_router
 from app.database import (
@@ -281,6 +285,9 @@ def on_startup():
 
 @app.get("/")
 def read_root():
+    index_path = os.path.join(FRONTEND_DIST_DIR, "index.html")
+    if os.path.isfile(index_path):
+        return FileResponse(index_path)
     return {"message": "Welcome to VentureAgent API"}
 
 @app.get("/health")
@@ -1094,6 +1101,26 @@ def update_user_profile(username: str, data: ProfileUpdate):
         return {"message": "Profile updated successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/{full_path:path}", include_in_schema=False)
+async def serve_frontend(full_path: str):
+    """
+    生产部署时由 FastAPI 直接托管 frontend/dist，避免服务器必须安装 Node.js。
+    API 路由已在此前声明，这个 catch-all 仅兜底前端静态资源与 SPA 路由。
+    """
+    if not os.path.isdir(FRONTEND_DIST_DIR):
+        raise HTTPException(status_code=404, detail="Frontend dist not found")
+
+    normalized_path = (full_path or "").lstrip("/")
+    requested_path = os.path.normpath(os.path.join(FRONTEND_DIST_DIR, normalized_path))
+    if normalized_path and requested_path.startswith(FRONTEND_DIST_DIR) and os.path.isfile(requested_path):
+        return FileResponse(requested_path)
+
+    index_path = os.path.join(FRONTEND_DIST_DIR, "index.html")
+    if os.path.isfile(index_path):
+        return FileResponse(index_path)
+
+    raise HTTPException(status_code=404, detail="Frontend index not found")
 
 if __name__ == "__main__":
     import uvicorn

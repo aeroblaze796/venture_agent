@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import UserProfileModal from '../components/UserProfileModal';
-import { 
+import {
   Table, Tag, Badge, Progress, Card, Button, 
   Statistic, Empty, Spin, message as antMessage,
   Tabs, Input, Modal, Descriptions, List, Avatar
@@ -24,6 +24,7 @@ import {
   SyncOutlined,
   EditOutlined
 } from '@ant-design/icons';
+import { buildApiUrl } from '../config/api';
 
 const { TabPane } = Tabs;
 const { TextArea } = Input;
@@ -106,7 +107,7 @@ export default function TeacherDashboard() {
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:8000/api/teacher/dashboard?teacher_id=${encodeURIComponent(teacherId)}`);
+      const res = await fetch(buildApiUrl(`/api/teacher/dashboard?teacher_id=${encodeURIComponent(teacherId)}`));
       const data = await res.json();
       setProjects(data.projects || []);
       setStats(data.stats || { student_count: 0, project_count: 0, high_risk_count: 0 });
@@ -126,7 +127,7 @@ export default function TeacherDashboard() {
   const selectProject = async (id) => {
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:8000/api/teacher/projects/${id}`);
+      const res = await fetch(buildApiUrl(`/api/teacher/projects/${id}`));
       if (res.ok) {
         const data = await res.json();
         setProjectDetail(data);
@@ -142,7 +143,7 @@ export default function TeacherDashboard() {
   const handleSendIntervention = async () => {
     if (!interventionText.trim() || !projectDetail) return;
     try {
-      const res = await fetch(`http://localhost:8000/api/teacher/interventions?project_id=${projectDetail.project.id}&teacher_name=${encodeURIComponent(teacherName)}&content=${encodeURIComponent(interventionText)}`, {
+      const res = await fetch(buildApiUrl(`/api/teacher/interventions?project_id=${projectDetail.project.id}&teacher_name=${encodeURIComponent(teacherName)}&content=${encodeURIComponent(interventionText)}`), {
         method: 'POST'
       });
       if (res.ok) {
@@ -158,7 +159,7 @@ export default function TeacherDashboard() {
     if (!projectDetail) return;
     setAuditLoading(true);
     try {
-      const res = await fetch(`http://localhost:8000/api/teacher/projects/${projectDetail.project.id}/audit`, { method: 'POST' });
+      const res = await fetch(buildApiUrl(`/api/teacher/projects/${projectDetail.project.id}/audit`), { method: 'POST' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         antMessage.error(data.detail || data.error || "审计触发失败");

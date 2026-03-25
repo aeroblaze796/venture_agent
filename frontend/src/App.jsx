@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-route
 import StudentWorkspace from './pages/StudentWorkspace';
 import TeacherDashboard from './pages/TeacherDashboard';
 import AdminMatrix from './pages/AdminMatrix';
+import { buildApiUrl } from './config/api';
 import './index.css';
 
 function Portal() {
@@ -47,7 +48,7 @@ function Portal() {
     setErrorMsg('');
     try {
       // 登录流：调用后端接口
-      const response = await fetch('http://localhost:8000/api/auth/login', {
+      const response = await fetch(buildApiUrl('/api/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: username, password: password }),
@@ -108,7 +109,7 @@ function Portal() {
         grade: targetRole === '/student' ? grade : null
       };
 
-      const response = await fetch('http://localhost:8000/api/auth/register', {
+      const response = await fetch(buildApiUrl('/api/auth/register'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

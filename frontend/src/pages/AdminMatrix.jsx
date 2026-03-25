@@ -15,6 +15,7 @@ import {
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import UserProfileModal from '../components/UserProfileModal';
+import { buildApiUrl } from '../config/api';
 
 const { Header, Content, Sider } = Layout;
 
@@ -49,7 +50,7 @@ const AdminMatrix = () => {
 
   const fetchStats = async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/admin/dashboard');
+      const res = await fetch(buildApiUrl('/api/admin/dashboard'));
       if (res.ok) setStats(await res.json());
     } catch (e) { console.error(e); }
   };
@@ -57,7 +58,7 @@ const AdminMatrix = () => {
   const fetchProjects = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('http://localhost:8000/api/admin/projects');
+      const res = await fetch(buildApiUrl('/api/admin/projects'));
       if (res.ok) setProjects(await res.json());
     } catch (e) { console.error(e); }
     finally { setIsLoading(false); }
@@ -65,10 +66,10 @@ const AdminMatrix = () => {
 
   const fetchUsers = async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/admin/identities'); // 尝试新接口
+      const res = await fetch(buildApiUrl('/api/admin/identities')); // 尝试新接口
       if (!res.ok) {
         // 退而求其次使用原接口 (具备数组容错逻辑)
-        const res2 = await fetch('http://localhost:8000/api/admin/users');
+        const res2 = await fetch(buildApiUrl('/api/admin/users'));
         if (res2.ok) {
            const data = await res2.json();
            const normalized = data.map(item => {
@@ -90,7 +91,7 @@ const AdminMatrix = () => {
 
   const fetchSqliteTables = async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/admin/sqlite/tables');
+      const res = await fetch(buildApiUrl('/api/admin/sqlite/tables'));
       if (res.ok) {
         const tables = await res.json();
         setSqliteTables(tables);
@@ -105,7 +106,7 @@ const AdminMatrix = () => {
     setSelectedTable(tableName);
     setSqliteLoading(true);
     try {
-      const res = await fetch(`http://localhost:8000/api/admin/sqlite/data/${tableName}`);
+      const res = await fetch(buildApiUrl(`/api/admin/sqlite/data/${tableName}`));
       if (res.ok) {
         setTableData(await res.json());
       }

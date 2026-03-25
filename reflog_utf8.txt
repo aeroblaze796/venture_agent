@@ -1,3 +1,0 @@
-﻿7a63910 HEAD@{0}: commit: 缂栬緫棰勮浼樺寲2
-c6b9bfe HEAD@{1}: commit: 椤圭洰缂栬緫棰勮浼樺寲
-06a09c3 HEAD@{2}: clone: from https://github.com/aeroblaze796/venture_agent.git

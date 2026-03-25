@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, Form, Input, Button, Avatar, Tag, message, Divider, Spin } from 'antd';
 import { UserOutlined, IdcardOutlined, BankOutlined, SafetyOutlined } from '@ant-design/icons';
+import { buildApiUrl } from '../config/api';
 
 const UserProfileModal = ({ visible, onCancel, username }) => {
   const [form] = Form.useForm();
@@ -16,7 +17,7 @@ const UserProfileModal = ({ visible, onCancel, username }) => {
   const fetchProfile = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:8000/api/user/profile?username=${username}`);
+      const res = await fetch(buildApiUrl(`/api/user/profile?username=${username}`));
       if (res.ok) {
         const data = await res.json();
         setProfile(data);
@@ -36,7 +37,7 @@ const UserProfileModal = ({ visible, onCancel, username }) => {
   const handleUpdate = async (values) => {
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:8000/api/user/profile/update?username=${username}`, {
+      const res = await fetch(buildApiUrl(`/api/user/profile/update?username=${username}`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(values)

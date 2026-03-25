@@ -42,6 +42,7 @@ import {
 } from "@ant-design/icons";
 import "./VentureDashboard.css";
 import UserProfileModal from "../components/UserProfileModal";
+import { buildApiUrl, buildAssetUrl } from "../config/api";
 
 // --- 微型 SVG 雷达图组件 ---
 const RadarChart = ({ data, size = 180 }) => {
@@ -160,7 +161,7 @@ const StudentWorkspace = () => {
       return;
     }
     try {
-      const res = await fetch(`http://localhost:8000/api/sync/dashboard?user_id=${username}`);
+      const res = await fetch(buildApiUrl(`/api/sync/dashboard?user_id=${username}`));
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
       if (data && data.projects) {
@@ -185,7 +186,7 @@ const StudentWorkspace = () => {
       if (!username) return;
       try {
         await fetchDashboardData();
-        const res = await fetch(`http://localhost:8000/api/conversations?user_id=${username}`);
+        const res = await fetch(buildApiUrl(`/api/conversations?user_id=${username}`));
         if (res.ok) {
           const convs = await res.json();
           if (Array.isArray(convs) && convs.length > 0) {
@@ -246,7 +247,7 @@ const StudentWorkspace = () => {
 
   const fetchProjectFiles = async (id) => {
     try {
-      const res = await fetch(`http://localhost:8000/api/projects/${id}/files`);
+      const res = await fetch(buildApiUrl(`/api/projects/${id}/files`));
       if (res.ok) {
         const files = await res.json();
         setProjectFiles(files);
@@ -261,7 +262,7 @@ const StudentWorkspace = () => {
       setActiveFileId(null);
     } else {
       try {
-        const res = await fetch(`http://localhost:8000/api/projects/${activeProjectId}/files/${fileId}`);
+        const res = await fetch(buildApiUrl(`/api/projects/${activeProjectId}/files/${fileId}`));
         if (res.ok) {
           const data = await res.json();
           setEditorContent(data.content);
@@ -276,7 +277,7 @@ const StudentWorkspace = () => {
     const newId = `va_session_${username}_${Date.now()}`;
     const greeting = '你好！我是你的项目助手。今天有什么新灵感或者进展想聊聊吗？';
     try {
-      await fetch("http://localhost:8000/api/conversations", {
+      await fetch(buildApiUrl("/api/conversations"), {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: newId, user_id: username, title: '新灵感会话', greeting })
       });
@@ -290,7 +291,7 @@ const StudentWorkspace = () => {
     if (!id) return;
     setActiveSessionId(id);
     try {
-      const res = await fetch(`http://localhost:8000/api/conversations/${id}/messages`);
+      const res = await fetch(buildApiUrl(`/api/conversations/${id}/messages`));
       if (res.ok) {
         const msgs = await res.json();
         setChatLog(Array.isArray(msgs) ? msgs : []);
@@ -304,7 +305,7 @@ const StudentWorkspace = () => {
   const handleRenameSession = async () => {
     if (!editSessionTitle.trim() || !editingSessionId) return;
     try {
-      await fetch(`http://localhost:8000/api/conversations/${editingSessionId}`, {
+      await fetch(buildApiUrl(`/api/conversations/${editingSessionId}`), {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: editSessionTitle })
       });
@@ -316,7 +317,7 @@ const StudentWorkspace = () => {
 
   const handleDeleteSession = async (id) => {
     try {
-      await fetch(`http://localhost:8000/api/conversations/${id}`, { method: 'DELETE' });
+      await fetch(buildApiUrl(`/api/conversations/${id}`), { method: 'DELETE' });
       setHistory(prev => prev.filter(s => s.id !== id));
       if (activeSessionId === id) { setChatLog([]); setActiveSessionId(null); }
       message.success("会话已删除。");
@@ -325,13 +326,13 @@ const StudentWorkspace = () => {
 
   const handleDeleteFile = async (fileId, fileUrl) => {
     try {
-      await fetch(`http://localhost:8000/api/project-files/${fileId}`, { method: 'DELETE' });
+      await fetch(buildApiUrl(`/api/project-files/${fileId}`), { method: 'DELETE' });
       const wasActive = activeFileId === fileId;
       
       // 1. 立即获取最新的文件列表并更新状态
       let newFiles = [];
       if (activeProjectId) {
-        const res = await fetch(`http://localhost:8000/api/projects/${activeProjectId}/files`);
+        const res = await fetch(buildApiUrl(`/api/projects/${activeProjectId}/files`));
         if (res.ok) {
           newFiles = await res.json();
           setProjectFiles(newFiles);
@@ -373,7 +374,7 @@ const StudentWorkspace = () => {
     setInputValue("");
     setIsSending(true);
     try {
-      const res = await fetch("http://localhost:8000/api/chat", {
+      const res = await fetch(buildApiUrl("/api/chat"), {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: inputValue, session_id: activeSessionId, project_id: activeProjectId })
       });
@@ -390,7 +391,7 @@ const StudentWorkspace = () => {
     if (!activeProjectId) return;
     setIsSaving(true);
     try {
-      const res = await fetch(`http://localhost:8000/api/projects/${activeProjectId}/content`, {
+      const res = await fetch(buildApiUrl(`/api/projects/${activeProjectId}/content`), {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content, file_id: activeFileId })
       });
@@ -412,7 +413,7 @@ const StudentWorkspace = () => {
     if (activeProjectId) formData.append("project_id", activeProjectId);
     const hide = message.loading('解析中...', 0);
     try {
-      const res = await fetch("http://localhost:8000/api/projects/import", { method: "POST", body: formData });
+      const res = await fetch(buildApiUrl("/api/projects/import"), { method: "POST", body: formData });
       if (!res.ok) throw new Error("Upload failed");
       const data = await res.json();
       hide();
@@ -479,7 +480,7 @@ const StudentWorkspace = () => {
 
     setIsSaving(true);
     try {
-      const resp = await fetch('http://localhost:8000/api/projects', {
+      const resp = await fetch(buildApiUrl('/api/projects'), {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...projectForm, content: editorContent, owner_id: localStorage.getItem('va_username') })
       });
@@ -503,7 +504,7 @@ const StudentWorkspace = () => {
   const handleRenameProject = async () => {
     if (!editProjectTitle.trim() || !editingProjectId) return;
     try {
-      const res = await fetch(`http://localhost:8000/api/projects/${editingProjectId}`, {
+      const res = await fetch(buildApiUrl(`/api/projects/${editingProjectId}`), {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: editProjectTitle })
       });
@@ -522,7 +523,7 @@ const StudentWorkspace = () => {
 
   const handleDeleteProject = async (id) => {
     try {
-      const res = await fetch(`http://localhost:8000/api/projects/${id}`, { method: 'DELETE' });
+      const res = await fetch(buildApiUrl(`/api/projects/${id}`), { method: 'DELETE' });
       if (res.ok) {
         if (activeProjectId === id) { setActiveProjectId(null); setEditorContent(""); }
         // 瞬间乐观更新本地状态，防止“连坐删除”视觉延迟
@@ -559,7 +560,7 @@ const StudentWorkspace = () => {
   const handleAddLog = async () => {
     if (!newLogContent.trim() || !activeProjectId) return;
     try {
-      const res = await fetch(`http://localhost:8000/api/projects/${activeProjectId}/commits`, {
+      const res = await fetch(buildApiUrl(`/api/projects/${activeProjectId}/commits`), {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: newLogContent, author: localStorage.getItem('va_username') || 'Student' })
       });
@@ -582,7 +583,7 @@ const StudentWorkspace = () => {
     setShowReviewModal(true);
     try {
       const rubricValue = selectedRubric === "互联网+" ? "internet_plus" : "challenge_cup";
-      const res = await fetch(`http://localhost:8000/api/projects/${activeProjectId}/review`, { 
+      const res = await fetch(buildApiUrl(`/api/projects/${activeProjectId}/review`), { 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rubric: rubricValue })
@@ -859,10 +860,10 @@ const StudentWorkspace = () => {
                                           {activeFileUrl.toLowerCase().endsWith('.pdf') ? 'PDF Source Reference (Read-only)' : 'Docx Content Preview'}
                                         </span>
                                       </div>
-                                      <a href={activeFileUrl.startsWith('http') ? activeFileUrl : `http://localhost:8000${activeFileUrl}`} download className="text-[9px] font-black text-indigo-500 hover:text-indigo-700">下载原件</a>
+                                      <a href={buildAssetUrl(activeFileUrl)} download className="text-[9px] font-black text-indigo-500 hover:text-indigo-700">下载原件</a>
                                     </div>
                                     {activeFileUrl.toLowerCase().endsWith('.pdf') ? (
-                                      <iframe src={activeFileUrl.startsWith('http') ? activeFileUrl : `http://localhost:8000${activeFileUrl}`} className="w-full flex-1 border-none" title="PDF Preview" />
+                                      <iframe src={buildAssetUrl(activeFileUrl)} className="w-full flex-1 border-none" title="PDF Preview" />
                                     ) : (
                                       <div className="w-full flex-1 bg-white p-10 overflow-y-auto custom-scrollbar shadow-inner">
                                         <div className="max-w-2xl mx-auto py-8 text-slate-700 leading-relaxed font-serif whitespace-pre-wrap">
