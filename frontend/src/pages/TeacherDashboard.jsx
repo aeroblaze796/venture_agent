@@ -92,6 +92,8 @@ export default function TeacherDashboard() {
   const [projectDetail, setProjectDetail] = useState(null);
   const [interventionText, setInterventionText] = useState('');
   const [auditLoading, setAuditLoading] = useState(false);
+  const [planLoading, setPlanLoading] = useState(false);
+  const [teachingPlan, setTeachingPlan] = useState('');
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [editName, setEditName] = useState(teacherName);
   const [editId, setEditId] = useState(teacherId);
@@ -173,6 +175,33 @@ export default function TeacherDashboard() {
       antMessage.error("审计触发失败");
     } finally {
       setAuditLoading(false);
+    }
+  };
+
+  const handleGenerateTeachingPlan = async () => {
+    const hasMistakes = topMistakes.length > 0 && (topMistakes[0]?.count || 0) > 0;
+    if (!hasMistakes) {
+      antMessage.warning("当前暂无可用的高频商业逻辑盲区，暂时无法生成下周干预方案");
+      return;
+    }
+
+    setPlanLoading(true);
+    try {
+      const teacherIdentity = teacherId || teacherName;
+      const res = await fetch(buildApiUrl(`/api/teacher/weekly-plan?teacher_id=${encodeURIComponent(teacherIdentity)}`));
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        antMessage.error(data.detail || data.error || "下周干预方案生成失败");
+        return;
+      }
+
+      setTeachingPlan(data.plan || "");
+      antMessage.success("下周干预方案已生成");
+    } catch (e) {
+      antMessage.error("下周干预方案生成失败");
+    } finally {
+      setPlanLoading(false);
     }
   };
 
@@ -323,24 +352,56 @@ export default function TeacherDashboard() {
 
               {/* 核心洞察卡片 */}
               <Card 
-                title={<span><WarningOutlined className="mr-2 text-rose-500" /> Top 商业逻辑盲区 (H原则冲突)</span>} 
+                title={<span><WarningOutlined className="mr-2 text-rose-500" /> Top 商业逻辑盲区 (H原则冲突)</span>}
+                extra={
+                  <Button
+                    type="primary"
+                    icon={<ExperimentOutlined />}
+                    loading={planLoading}
+                    disabled={topMistakes.length === 0 || (topMistakes[0]?.count || 0) === 0}
+                    onClick={handleGenerateTeachingPlan}
+                    className="bg-emerald-600 border-none rounded-full font-black"
+                  >
+                    生成下周干预方案
+                  </Button>
+                }
                 className="border-none shadow-md rounded-3xl bg-white"
               >
-                <div className="grid grid-cols-3 gap-6">
-                  {topMistakes.length > 0 ? topMistakes.map((m, i) => (
-                    <div key={i} className="p-6 bg-rose-50/50 rounded-[24px] border border-rose-100/50 transition-all hover:bg-rose-100/50">
-                      <div className="flex justify-between items-start mb-3">
-                        <span className="px-3 py-1 bg-rose-200 text-rose-700 text-[10px] font-black rounded-full uppercase">{m.name.split(' ')[0]}</span>
-                        <span className="text-rose-300 font-black text-2xl">0{i+1}</span>
+                <div className="space-y-8">
+                  <div className="grid grid-cols-3 gap-6">
+                    {topMistakes.length > 0 ? topMistakes.map((m, i) => (
+                      <div key={i} className="p-6 bg-rose-50/50 rounded-[24px] border border-rose-100/50 transition-all hover:bg-rose-100/50">
+                        <div className="flex justify-between items-start mb-3">
+                          <span className="px-3 py-1 bg-rose-200 text-rose-700 text-[10px] font-black rounded-full uppercase">{m.name.split(' ')[0]}</span>
+                          <span className="text-rose-300 font-black text-2xl">0{i+1}</span>
+                        </div>
+                        <p className="text-sm font-black text-slate-800">{m.name}</p>
+                        <p className="text-xs text-slate-500 mt-2 leading-relaxed h-12 overflow-hidden">{m.desc}</p>
+                        <div className="mt-4 pt-4 border-t border-rose-200/30 flex items-center justify-between text-[10px] font-black text-rose-600 uppercase tracking-widest">
+                          <span>波及范围</span>
+                          <span>{m.count} PROJECTS</span>
+                        </div>
                       </div>
-                      <p className="text-sm font-black text-slate-800">{m.name}</p>
-                      <p className="text-xs text-slate-500 mt-2 leading-relaxed h-12 overflow-hidden">{m.desc}</p>
-                      <div className="mt-4 pt-4 border-t border-rose-200/30 flex items-center justify-between text-[10px] font-black text-rose-600 uppercase tracking-widest">
-                        <span>波及范围</span>
-                        <span>{m.count} PROJECTS</span>
+                    )) : <Empty description="暂无共性风险点" />}
+                  </div>
+
+                  <div className="border-t border-slate-100 pt-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h4 className="text-slate-800 font-black m-0">下周教学干预建议</h4>
+                        <p className="text-[11px] text-slate-400 mt-1 mb-0">基于当前 Top H 原则冲突，由 LLM 自动生成约 300 字的实操教学计划</p>
                       </div>
+                      <Tag color="cyan" className="rounded-full border-none px-3 font-bold">≈ 300 字</Tag>
                     </div>
-                  )) : <Empty description="暂无共性风险点" />}
+                    <TextArea
+                      value={teachingPlan}
+                      onChange={(e) => setTeachingPlan(e.target.value)}
+                      readOnly={planLoading}
+                      autoSize={{ minRows: 5, maxRows: 9 }}
+                      placeholder="点击右上角“生成下周干预方案”后，这里会展示针对高频商业逻辑盲区的课堂讲解重点、实操任务和验收建议。"
+                      className="rounded-[20px] bg-slate-50 border-slate-100 text-slate-700"
+                    />
+                  </div>
                 </div>
               </Card>
 

@@ -201,6 +201,45 @@ def extract_h_principles(*texts: str) -> list[str]:
             inferred_tags.append(tag)
     return inferred_tags
 
+def build_teacher_top_mistakes(cursor, teacher_identity: str):
+    """
+    汇总教师名下项目的 H 原则高频错误，供教师大盘与教学计划生成共用。
+    teacher_identity 同时兼容教师工号与姓名。
+    """
+    cursor.execute("""
+        SELECT pa.audit_summary, pa.evidence_trace
+        FROM project_assessments pa
+        JOIN projects p ON pa.project_id = p.id
+        WHERE (p.advisor_id = ? OR p.advisor_name = ?)
+          AND pa.audit_summary IS NOT NULL
+    """, (teacher_identity, teacher_identity))
+    assessment_rows = cursor.fetchall()
+
+    from collections import Counter
+
+    h_counts = Counter()
+    for row in assessment_rows:
+        found_tags = set(extract_h_principles(row["audit_summary"], row["evidence_trace"]))
+        for tag in found_tags:
+            h_counts[tag] += 1
+
+    h_desc_map = {
+        "H1": "价值主张错位", "H2": "用户细分错误", "H3": "痛点假设不成立",
+        "H4": "市场规模幻觉", "H5": "缺乏可行性验证", "H6": "竞争壁垒薄弱",
+        "H7": "推广渠道错位", "H8": "单位经济不成立", "H9": "团队资源错配"
+    }
+
+    top_mistakes = []
+    for tag, count in h_counts.most_common(5):
+        top_mistakes.append({
+            "tag": tag,
+            "name": f"{tag} {h_desc_map.get(tag, '未定义原则')}",
+            "count": count,
+            "desc": f"在{count}个项目中出现该原则报错"
+        })
+
+    return top_mistakes
+
 def resolve_project_audit_context(project_id: int):
     """
     解析教师审计与学生手动评审所依赖的项目正文。
@@ -684,34 +723,7 @@ async def get_teacher_dashboard(teacher_id: str):
     student_count = cursor.fetchone()['student_count'] or 0
     
     # 统计高频错误 (基于 H 原则)
-    cursor.execute("""
-        SELECT audit_summary, evidence_trace
-        FROM project_assessments pa
-        JOIN projects p ON pa.project_id = p.id
-        WHERE p.advisor_id = ? AND pa.audit_summary IS NOT NULL
-    """, (teacher_id,))
-    assessment_rows = cursor.fetchall()
-
-    from collections import Counter
-    h_counts = Counter()
-    for row in assessment_rows:
-        found_tags = set(extract_h_principles(row["audit_summary"], row["evidence_trace"]))
-        for tag in found_tags:
-            h_counts[tag] += 1
-            
-    h_desc_map = {
-        "H1": "价值主张错位", "H2": "用户细分错误", "H3": "痛点假设不成立", 
-        "H4": "市场规模幻觉", "H5": "缺乏可行性验证", "H6": "竞争壁垒薄弱", 
-        "H7": "推广渠道错位", "H8": "单位经济不成立", "H9": "团队资源错配"
-    }
-    
-    top_mistakes = []
-    for tag, count in h_counts.most_common(5):
-        top_mistakes.append({
-            "name": f"{tag} {h_desc_map.get(tag, '未定义原则')}",
-            "count": count,
-            "desc": f"在{count}个项目中出现该原则报错"
-        })
+    top_mistakes = build_teacher_top_mistakes(cursor, teacher_id)
     if not top_mistakes:
         top_mistakes = [
             {"name": "暂无高频错误", "count": 0, "desc": "当前暂无风险预警项目"}
@@ -844,20 +856,20 @@ async def create_teacher_intervention(project_id: int, teacher_name: str, conten
     return {"status": "success", "message": "干预锦囊已下发"}
 
 @app.get("/api/teacher/intervention-generator")
-async def generate_teaching_plan(teacher_name: str):
+async def generate_teaching_plan(teacher_id: Optional[str] = None, teacher_name: Optional[str] = None):
+    teacher_identity = (teacher_id or teacher_name or "").strip()
+    if teacher_identity:
+        return await generate_weekly_intervention_plan(teacher_id=teacher_identity)
+    if not teacher_identity:
+        return {"plan": "未提供教师身份信息，暂时无法生成教学干预方案。"}
+
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
-    cursor.execute("""
-        SELECT p.name, pa.audit_summary 
-        FROM projects p
-        JOIN project_assessments pa ON p.id = pa.project_id
-        WHERE p.advisor_name = ? OR p.advisor_id = ?
-    """, (teacher_name, teacher_name))
-    records = cursor.fetchall()
+    top_mistakes = build_teacher_top_mistakes(cursor, teacher_identity)
     conn.close()
     
-    if not records:
+    if not top_mistakes:
         return {"plan": "该教师名下暂无项目评估数据，无法生成针对性教学计划。"}
         
     summaries_text = "\\n".join([f"项目[{r['name']}]: {r['audit_summary']}" for r in records if r['audit_summary']])
@@ -877,6 +889,47 @@ async def generate_teaching_plan(teacher_name: str):
 """
         response = llm.invoke(prompt)
         return {"plan": response.content}
+    except Exception as e:
+        return {"plan": f"系统生成教学计划失败：{str(e)}"}
+
+@app.get("/api/teacher/weekly-plan")
+async def generate_weekly_intervention_plan(teacher_id: Optional[str] = None, teacher_name: Optional[str] = None):
+    teacher_identity = (teacher_id or teacher_name or "").strip()
+    if not teacher_identity:
+        return {"plan": "未提供教师身份信息，暂时无法生成下周干预方案。"}
+
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    top_mistakes = build_teacher_top_mistakes(cursor, teacher_identity)
+    conn.close()
+
+    if not top_mistakes:
+        return {"plan": "当前暂无可用的高频商业逻辑盲区数据，建议先完成项目 AI 审计后再生成下周干预方案。"}
+
+    mistake_summary = "\n".join([
+        f"{idx + 1}. {item['name']}，出现 {item['count']} 次；说明：{item['desc']}"
+        for idx, item in enumerate(top_mistakes[:3])
+    ])
+
+    try:
+        from app.agent.graph import get_llm
+        llm = get_llm()
+        prompt = f"""你是一名高校创新创业课程教研主任。下面是某位指导教师最近在教师端全局项目大盘中统计出的 Top 商业逻辑盲区（H原则冲突）：
+
+{mistake_summary}
+
+请直接生成一份下周干预方案，要求：
+1. 只聚焦最高频的1到2个核心错误。
+2. 输出必须是教师可直接执行的实操教学计划，而不是泛泛建议。
+3. 内容需要覆盖：本周教学目标、课堂讲解重点、课后实操任务、教师观察与验收方式。
+4. 语气专业、简洁、有执行感。
+5. 总字数控制在300字左右，尽量不要超过320字。
+6. 直接输出正文，不要使用 Markdown 列表，不要额外添加标题。
+"""
+        response = llm.invoke(prompt)
+        plan_text = response.content if isinstance(response.content, str) else str(response.content)
+        return {"plan": plan_text.strip()}
     except Exception as e:
         return {"plan": f"系统生成教学计划失败：{str(e)}"}
 
