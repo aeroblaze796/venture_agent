@@ -44,13 +44,28 @@ import "./VentureDashboard.css";
 import UserProfileModal from "../components/UserProfileModal";
 import { buildApiUrl, buildAssetUrl } from "../config/api";
 
+const CAPABILITY_DIMENSIONS = [
+  { key: "innovation", label: "创新性" },
+  { key: "feasibility", label: "落地性" },
+  { key: "technology", label: "技术力" },
+  { key: "team_fit", label: "团队契合" },
+  { key: "market", label: "市场潜力" },
+  { key: "compliance", label: "合规性" }
+];
+
 // --- 微型 SVG 雷达图组件 ---
-const RadarChart = ({ data, size = 180 }) => {
-  const points = data.map((d, i) => {
-    const angle = (Math.PI * 2 * i) / data.length - Math.PI / 2;
-    const r = (d.value / 100) * (size / 2);
-    return `${size / 2 + r * Math.cos(angle)},${size / 2 + r * Math.sin(angle)}`;
-  }).join(" ");
+const RadarChart = ({ data = [], size = 180 }) => {
+  const safeData = data.length > 0
+    ? data
+    : CAPABILITY_DIMENSIONS.map(({ label }) => ({ label, value: null }));
+  const hasValues = safeData.some((item) => typeof item.value === "number");
+  const points = hasValues
+    ? safeData.map((d, i) => {
+        const angle = (Math.PI * 2 * i) / safeData.length - Math.PI / 2;
+        const r = ((d.value ?? 0) / 100) * (size / 2);
+        return `${size / 2 + r * Math.cos(angle)},${size / 2 + r * Math.sin(angle)}`;
+      }).join(" ")
+    : "";
 
   const gridLevels = [0.2, 0.4, 0.6, 0.8, 1];
   return (
@@ -58,16 +73,34 @@ const RadarChart = ({ data, size = 180 }) => {
       {gridLevels.map((lvl, idx) => (
         <circle key={idx} cx={size / 2} cy={size / 2} r={(size / 2) * lvl} fill="none" stroke="#e2e8f0" strokeWidth="1" strokeDasharray="2,2" />
       ))}
-      {[0, 60, 120, 180, 240, 300].map(angle => (
-        <line key={angle} x1={size / 2} x2={size / 2 + (size / 2) * Math.cos((angle * Math.PI) / 180)} y1={size / 2} y2={size / 2 + (size / 2) * Math.sin((angle * Math.PI) / 180)} stroke="#e2e8f0" />
-      ))}
-      <polygon points={points} fill="rgba(37, 99, 235, 0.15)" stroke="#2563eb" strokeWidth="2" strokeLinejoin="round" />
-      {data.map((d, i) => {
-        const angle = (Math.PI * 2 * i) / data.length - Math.PI / 2;
+      {safeData.map((_, i) => {
+        const angle = (Math.PI * 2 * i) / safeData.length - Math.PI / 2;
+        return (
+          <line
+            key={i}
+            x1={size / 2}
+            x2={size / 2 + (size / 2) * Math.cos(angle)}
+            y1={size / 2}
+            y2={size / 2 + (size / 2) * Math.sin(angle)}
+            stroke="#e2e8f0"
+          />
+        );
+      })}
+      {hasValues && <polygon points={points} fill="rgba(37, 99, 235, 0.15)" stroke="#2563eb" strokeWidth="2" strokeLinejoin="round" />}
+      {hasValues && safeData.map((d, i) => {
+        const angle = (Math.PI * 2 * i) / safeData.length - Math.PI / 2;
+        const r = ((d.value ?? 0) / 100) * (size / 2);
+        const x = size / 2 + r * Math.cos(angle);
+        const y = size / 2 + r * Math.sin(angle);
+        return <circle key={`point-${i}`} cx={x} cy={y} r="3" fill="#2563eb" />;
+      })}
+      {safeData.map((d, i) => {
+        const angle = (Math.PI * 2 * i) / safeData.length - Math.PI / 2;
         const x = size / 2 + (size / 2 + 15) * Math.cos(angle);
         const y = size / 2 + (size / 2 + 15) * Math.sin(angle);
         return <text key={i} x={x} y={y} textAnchor="middle" className="text-[9px] font-black fill-slate-400 uppercase tracking-tighter">{d.label}</text>;
       })}
+      {!hasValues && <text x={size / 2} y={size / 2 + 4} textAnchor="middle" className="text-[10px] font-black fill-slate-300">待生成</text>}
     </svg>
   );
 };
@@ -135,11 +168,14 @@ const StudentWorkspace = () => {
   const [editingProjectId, setEditingProjectId] = useState(null);
   const [editProjectTitle, setEditProjectTitle] = useState("");
   const [loading, setLoading] = useState(false);
+  const [capabilityProfile, setCapabilityProfile] = useState(null);
+  const [capabilityProfileLoading, setCapabilityProfileLoading] = useState(false);
 
-  const radarData = [
-    { label: '创新性', value: 85 }, { label: '落地性', value: 70 }, { label: '技术力', value: 90 },
-    { label: '团队契合', value: 75 }, { label: '市场潜力', value: 80 }, { label: '合规性', value: 95 }
-  ];
+  const capabilityRadarData = CAPABILITY_DIMENSIONS.map(({ key, label }) => ({
+    key,
+    label,
+    value: capabilityProfile?.scores?.[key] ?? null
+  }));
 
   const handleOpenNewProject = () => {
     setProjectForm({
@@ -284,6 +320,7 @@ const StudentWorkspace = () => {
     if (options.bootstrap) {
       bootstrapConversationRef.current = newId;
     }
+    setCapabilityProfile(null);
     const greeting = '你好！我是你的项目助手。今天有什么新灵感或者进展想聊聊吗？';
     try {
       await fetch(buildApiUrl("/api/conversations"), {
@@ -307,6 +344,7 @@ const StudentWorkspace = () => {
   const handleSessionSwitch = async (id) => {
     if (!id) return;
     setActiveSessionId(id);
+    setCapabilityProfile(null);
     try {
       const res = await fetch(buildApiUrl(`/api/conversations/${id}/messages`));
       if (res.ok) {
@@ -347,10 +385,41 @@ const StudentWorkspace = () => {
           setChatLog([]);
           setActiveSessionId(null);
           setInputValue("");
+          setCapabilityProfile(null);
         }
       }
       message.success("会话已删除。");
     } catch (e) { console.error(e); }
+  };
+
+  const handleGenerateCapabilityProfile = async () => {
+    if (!activeSessionId) {
+      message.warning("请先进入一个会话");
+      return;
+    }
+
+    setCapabilityProfileLoading(true);
+    try {
+      const res = await fetch(buildApiUrl(`/api/conversations/${activeSessionId}/capability-profile`));
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data.detail || data.error || "能力画像生成失败");
+      }
+
+      setCapabilityProfile(data.profile || null);
+      message.success("能力画像已生成");
+    } catch (e) {
+      console.error(e);
+      const errorText = e?.message || "能力画像生成失败";
+      if (errorText.includes("至少需要 3 轮问答")) {
+        message.warning("至少需要 3 轮问答才能生成能力画像");
+      } else {
+        message.error(errorText);
+      }
+    } finally {
+      setCapabilityProfileLoading(false);
+    }
   };
 
   const handleDeleteFile = async (fileId, fileUrl) => {
@@ -1032,8 +1101,28 @@ const StudentWorkspace = () => {
                 </div>
               </div>
               <div className="console-card animate-slide-in" style={{ animationDelay: '0.1s' }}>
-                <h3 className="text-[12px] font-black text-slate-700 uppercase mb-7 tracking-widest flex items-center gap-2"><RadarChartOutlined className="text-indigo-500" /> 灵感能力画像</h3>
-                <div className="flex justify-center py-4"><RadarChart data={radarData} /></div>
+                <div className="flex items-center justify-between mb-5 gap-3">
+                  <h3 className="text-[12px] font-black text-slate-700 uppercase tracking-widest flex items-center gap-2 m-0"><RadarChartOutlined className="text-indigo-500" /> 灵感能力画像</h3>
+                  <Button
+                    size="small"
+                    shape="round"
+                    onClick={handleGenerateCapabilityProfile}
+                    loading={capabilityProfileLoading}
+                    disabled={!activeSessionId}
+                    className="bg-indigo-50 border-indigo-100 text-indigo-600 font-black shadow-sm"
+                  >
+                    生成
+                  </Button>
+                </div>
+                <div className="flex justify-center py-4"><RadarChart data={capabilityRadarData} /></div>
+                <p className="text-[10px] text-slate-400 font-bold text-center mb-4">基于当前会话最近 3 轮问答生成，继续对话后可重新点击“生成”刷新。</p>
+                <Input.TextArea
+                  readOnly
+                  autoSize={{ minRows: 4, maxRows: 6 }}
+                  value={capabilityProfile?.comment || ""}
+                  placeholder="点击“生成”后，这里会显示针对六维短板的短评，并引用你在对话中的原话。"
+                  className="rounded-2xl bg-slate-50 border-slate-100 text-slate-600"
+                />
               </div>
               <div className="console-card animate-slide-in" style={{ animationDelay: '0.2s' }}>
                 <h3 className="text-[12px] font-black text-slate-700 uppercase mb-4 tracking-widest flex items-center gap-2"><HistoryOutlined className="text-purple-500" /> 最近演进记录</h3>

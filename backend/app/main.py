@@ -9,6 +9,7 @@ import shutil
 import uuid
 import sqlite3
 import datetime
+import json
 from typing import Optional, List, Literal
 from pydantic import BaseModel, Field
 print(f"DEBUG: main.py loaded from {os.path.abspath(__file__)}")
@@ -99,6 +100,18 @@ class ProjectCreateRequest(BaseModel):
     advisorInfo: Optional[str] = None
     content: Optional[str] = ""
     members: List[MemberInfo] = []
+
+class StudentCapabilityScores(BaseModel):
+    innovation: int = Field(description="创新性评分，0 到 100")
+    feasibility: int = Field(description="落地性评分，0 到 100")
+    technology: int = Field(description="技术力评分，0 到 100")
+    team_fit: int = Field(description="团队契合评分，0 到 100")
+    market: int = Field(description="市场潜力评分，0 到 100")
+    compliance: int = Field(description="合规性评分，0 到 100")
+
+class StudentCapabilityProfile(BaseModel):
+    scores: StudentCapabilityScores
+    comment: str = Field(description="针对短板的短评，必须引用学生原话")
 
 # --- Helper Logic ---
 
@@ -284,6 +297,34 @@ def resolve_project_audit_context(project_id: int):
     finally:
         conn.close()
 
+def clamp_percentage_score(value) -> int:
+    try:
+        numeric = int(round(float(value)))
+    except (TypeError, ValueError):
+        numeric = 0
+    return max(0, min(100, numeric))
+
+def extract_json_payload(raw_content) -> dict:
+    text = raw_content
+    if isinstance(text, list):
+        text = "".join(str(part) for part in text)
+    text = str(text).strip()
+
+    if "```json" in text:
+        text = text.split("```json", 1)[1].split("```", 1)[0].strip()
+    elif "```" in text:
+        text = text.split("```", 1)[1].split("```", 1)[0].strip()
+
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        text = text[start:end + 1]
+
+    payload = json.loads(text)
+    if not isinstance(payload, dict):
+        raise ValueError("LLM 未返回 JSON 对象")
+    return payload
+
 # --- Endpoints ---
 
 @app.on_event("startup")
@@ -361,6 +402,102 @@ def rename_conv(conv_id: str, request: RenameRequest):
 def delete_conv(conv_id: str):
     delete_conversation(conv_id)
     return {"status": "ok"}
+
+@app.get("/api/conversations/{conv_id}/capability-profile")
+async def generate_conversation_capability_profile(conv_id: str):
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("SELECT id, title FROM conversations WHERE id = ?", (conv_id,))
+        conversation = cursor.fetchone()
+        if not conversation:
+            raise HTTPException(status_code=404, detail="会话不存在")
+
+        cursor.execute("""
+            SELECT id, role, agent, content, timestamp
+            FROM messages
+            WHERE conversation_id = ?
+              AND NOT (role = 'coach' AND COALESCE(agent, '') = '系统助手')
+            ORDER BY datetime(timestamp) DESC, id DESC
+            LIMIT 6
+        """, (conv_id,))
+        recent_messages = cursor.fetchall()
+    finally:
+        conn.close()
+
+    if len(recent_messages) < 6:
+        raise HTTPException(status_code=400, detail="至少需要 3 轮问答才能生成能力画像")
+
+    recent_messages = list(reversed(recent_messages))
+    transcript_lines = []
+    for index, row in enumerate(recent_messages):
+        round_index = index // 2 + 1
+        speaker = "学生" if row["role"] == "user" else (row["agent"] or "AI导师")
+        transcript_lines.append(f"第{round_index}轮{speaker}：{row['content']}")
+    transcript = "\n".join(transcript_lines)
+
+    try:
+        from app.agent.graph import get_llm
+
+        llm = get_llm()
+        prompt = f"""你是一名高校创新创业课程导师。下面是某位学生在当前会话中最近 3 轮问答（共 6 条消息）的原始记录，请只基于这些内容完成分析，不要使用会话外信息。
+
+会话标题：{conversation["title"]}
+对话记录：
+{transcript}
+
+请严格输出 JSON，对象格式如下：
+{{
+  "scores": {{
+    "innovation": 0到100的整数,
+    "feasibility": 0到100的整数,
+    "technology": 0到100的整数,
+    "team_fit": 0到100的整数,
+    "market": 0到100的整数,
+    "compliance": 0到100的整数
+  }},
+  "comment": "80到160字的中文短评"
+}}
+
+评分维度含义如下：
+- innovation：创新性
+- feasibility：落地性
+- technology：技术力
+- team_fit：团队契合
+- market：市场潜力
+- compliance：合规性
+
+补充要求：
+1. comment 只聚焦最明显的 1 到 2 个短板。
+2. comment 必须引用至少一句学生原话作为证据，引用时使用中文引号『』。
+3. comment 必须明确指出“第一轮 / 第二轮 / 第三轮”中的至少一轮，例如“学生在第一轮提到：『我们的客户是所有人』”。
+4. comment 要给出一条可以立刻执行的改进建议。
+5. 只输出 JSON，不要输出 Markdown，不要补充解释。
+"""
+        response = llm.invoke(prompt)
+        result = extract_json_payload(response.content)
+        raw_scores = result.get("scores", {})
+        normalized_scores = StudentCapabilityScores(
+            innovation=clamp_percentage_score(raw_scores.get("innovation")),
+            feasibility=clamp_percentage_score(raw_scores.get("feasibility")),
+            technology=clamp_percentage_score(raw_scores.get("technology")),
+            team_fit=clamp_percentage_score(raw_scores.get("team_fit")),
+            market=clamp_percentage_score(raw_scores.get("market")),
+            compliance=clamp_percentage_score(raw_scores.get("compliance")),
+        )
+        comment = str(result.get("comment", "")).strip()
+        if not comment:
+            raise ValueError("画像短评为空")
+
+        profile = StudentCapabilityProfile(scores=normalized_scores, comment=comment)
+        return {"status": "ok", "profile": profile.model_dump()}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Failed to generate conversation capability profile: {e}")
+        raise HTTPException(status_code=500, detail=f"能力画像生成失败：{str(e)}")
 
 @app.post("/api/chat", response_model=ChatResponse)
 def chat_endpoint(request: ChatRequest):
