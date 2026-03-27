@@ -303,30 +303,39 @@ def get_conversation_messages(conv_id: str):
     conn.close()
     return [dict(row) for row in rows]
 
-def save_message(conv_id: str, role: str, content: str, agent: Optional[str] = None):
+def save_message(conv_id: str, role: str, content: str, agent: Optional[str] = None, user_id: Optional[str] = None):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    # 自动创建不存在的会话 (简单逻辑)
+    # 仅在显式提供 user_id 时才允许兜底创建会话，避免消息误写入错误用户
     cursor.execute("SELECT COUNT(*) FROM conversations WHERE id = ?", (conv_id,))
     exists = cursor.fetchone()[0] > 0
     
     if not exists:
+        if not user_id:
+            conn.close()
+            return False
         title = f"新对话 {datetime.now().strftime('%H:%M:%S')}"
         cursor.execute("INSERT INTO conversations (id, user_id, title) VALUES (?, ?, ?)",
-                       (conv_id, "1120230571", title))
+                       (conv_id, user_id, title))
     
     cursor.execute("INSERT INTO messages (conversation_id, role, content, agent) VALUES (?, ?, ?, ?)",
                    (conv_id, role, content, agent))
     conn.commit()
     conn.close()
+    return True
 
 def create_conversation(conv_id: str, user_id: str, title: str, greeting: str):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO conversations (id, user_id, title) VALUES (?, ?, ?)",
-                   (conv_id, user_id, title))
-    cursor.execute("INSERT INTO messages (conversation_id, role, content, agent) VALUES (?, ?, ?, ?)",
-                   (conv_id, "coach", greeting, "系统助手"))
+    cursor.execute("SELECT COUNT(*) FROM conversations WHERE id = ?", (conv_id,))
+    exists = cursor.fetchone()[0] > 0
+
+    if not exists:
+        cursor.execute("INSERT INTO conversations (id, user_id, title) VALUES (?, ?, ?)",
+                       (conv_id, user_id, title))
+        cursor.execute("INSERT INTO messages (conversation_id, role, content, agent) VALUES (?, ?, ?, ?)",
+                       (conv_id, "coach", greeting, "系统助手"))
+
     conn.commit()
     conn.close()
 
