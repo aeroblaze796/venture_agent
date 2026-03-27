@@ -62,6 +62,7 @@ class ChatRequest(BaseModel):
     message: str
     session_id: Optional[str] = "default_session_123"
     project_id: Optional[int] = None
+    agent: Optional[Literal["learning_tutor", "project_coach"]] = None
 
 class ChatResponse(BaseModel):
     reply: str
@@ -378,7 +379,11 @@ def chat_endpoint(request: ChatRequest):
             final_input_content = f"【教师干预约束：{rules_text}】\n用户的实际消息：{request.message}"
 
     input_message = HumanMessage(content=final_input_content)
-    initial_state = {"messages": [input_message], "next_agent": ""}
+    initial_state = {
+        "messages": [input_message],
+        "next_agent": "",
+        "forced_agent": request.agent or ""
+    }
     session_id = request.session_id or "default_session_123"
     config = {"configurable": {"thread_id": session_id}}
     

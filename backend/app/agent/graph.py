@@ -22,6 +22,8 @@ class AgentState(TypedDict, total=False):
     messages: Annotated[list[BaseMessage], add_messages]
     # 当前激活的专业 Agent（用于跨节点传递状态）
     next_agent: str
+    # 前端显式指定的目标 Agent；若存在则跳过自动意图识别
+    forced_agent: str
     # 额外存储的上下文或能力评分缓存
     context: dict[str, Any]
 
@@ -64,6 +66,11 @@ class RouteDecision(BaseModel):
 def router_node(state: AgentState) -> dict[str, Any]:
     print("🚦 [Router Node] 正在分析用户意图...")
     messages = state.get("messages", [])
+    forced_agent = state.get("forced_agent")
+
+    if forced_agent in {"learning_tutor", "project_coach"}:
+        print(f"🚦 [Router Node] 检测到前端显式指定 Agent，直接分发给: {forced_agent}")
+        return {"next_agent": forced_agent}
     
     try:
         llm = get_llm()

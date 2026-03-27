@@ -76,6 +76,7 @@ const StudentWorkspace = () => {
   const navigate = useNavigate();
   const [inputValue, setInputValue] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [selectedAgent, setSelectedAgent] = useState("project_coach");
   const [activePage, setActivePage] = useState("chat");
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [syncData, setSyncData] = useState({
@@ -404,7 +405,12 @@ const StudentWorkspace = () => {
     try {
       const res = await fetch(buildApiUrl("/api/chat"), {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: inputValue, session_id: activeSessionId, project_id: activeProjectId })
+        body: JSON.stringify({
+          message: inputValue,
+          session_id: activeSessionId,
+          project_id: activeProjectId,
+          agent: selectedAgent
+        })
       });
       const data = await res.json();
       setChatLog(prev => [...prev, { role: 'coach', agent: data.agent, text: data.reply }]);
@@ -789,6 +795,27 @@ const StudentWorkspace = () => {
               </div>
               <div className="p-8 h-[140px] flex items-center">
                 <div className="max-w-3xl mx-auto w-full relative">
+                  <div className="mb-3 flex items-center gap-2 px-2">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">提问对象</span>
+                    <Button
+                      size="small"
+                      shape="round"
+                      type={selectedAgent === 'project_coach' ? 'primary' : 'default'}
+                      onClick={() => setSelectedAgent('project_coach')}
+                      className={selectedAgent === 'project_coach' ? 'bg-blue-600 border-none font-black' : 'font-black border-slate-200 text-slate-500'}
+                    >
+                      项目教练 Agent
+                    </Button>
+                    <Button
+                      size="small"
+                      shape="round"
+                      type={selectedAgent === 'learning_tutor' ? 'primary' : 'default'}
+                      onClick={() => setSelectedAgent('learning_tutor')}
+                      className={selectedAgent === 'learning_tutor' ? 'bg-emerald-600 border-none font-black' : 'font-black border-slate-200 text-slate-500'}
+                    >
+                      学习辅导 Agent
+                    </Button>
+                  </div>
                   <div className="bg-gray-50 border border-gray-100 rounded-3xl overflow-hidden focus-within:shadow-xl transition-all">
                     <textarea value={inputValue} onChange={e => setInputValue(e.target.value)} onKeyDown={handleKeyDown} className="w-full bg-transparent border-none p-5 outline-none resize-none text-sm" placeholder="输入想法..." rows={1} />
                     <div className="absolute right-4 bottom-4"><Button onClick={handleSend} disabled={isSending || !inputValue.trim()} type="primary" shape="circle" icon={<SendOutlined />} /></div>
