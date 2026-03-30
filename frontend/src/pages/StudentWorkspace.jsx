@@ -133,7 +133,6 @@ const StudentWorkspace = () => {
   const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef(null);
   const prevProjectIdRef = useRef(null);
-  const bootstrapConversationRef = useRef(null);
 
   const [showLogModal, setShowLogModal] = useState(false);
   const [showReviewModal, setShowReviewModal] = useState(false);
@@ -253,7 +252,10 @@ const StudentWorkspace = () => {
             setHistory(convs.filter((conv, index, arr) => arr.findIndex(item => item.id === conv.id) === index));
             await handleSessionSwitch(convs[0].id);
           } else {
-            await handleNewChat({ bootstrap: true, username });
+            setHistory([]);
+            setActiveSessionId(null);
+            setChatLog([]);
+            setCapabilityProfile(null);
           }
         }
       } catch (e) {
@@ -340,14 +342,9 @@ const StudentWorkspace = () => {
     }
   };
 
-  const handleNewChat = async (options = {}) => {
-    const username = options.username || localStorage.getItem("va_username") || "1120230571";
-    const newId = options.bootstrap
-      ? (bootstrapConversationRef.current || `va_session_${username}_bootstrap`)
-      : `va_session_${username}_${Date.now()}`;
-    if (options.bootstrap) {
-      bootstrapConversationRef.current = newId;
-    }
+  const handleNewChat = async () => {
+    const username = localStorage.getItem("va_username") || "1120230571";
+    const newId = `va_session_${username}_${Date.now()}`;
     setCapabilityProfile(null);
     const greeting = '你好！我是你的项目助手。今天有什么新灵感或者进展想聊聊吗？';
     try {
@@ -400,12 +397,13 @@ const StudentWorkspace = () => {
 
   const handleDeleteSession = async (id) => {
     try {
-      await fetch(buildApiUrl(`/api/conversations/${id}`), { method: 'DELETE' });
+      const res = await fetch(buildApiUrl(`/api/conversations/${id}`), { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.detail || data.error || "删除会话失败");
+      }
       const remaining = history.filter(s => s.id !== id);
       setHistory(remaining);
-      if (bootstrapConversationRef.current === id) {
-        bootstrapConversationRef.current = null;
-      }
       if (activeSessionId === id) {
         if (remaining.length > 0) {
           await handleSessionSwitch(remaining[0].id);
@@ -417,7 +415,10 @@ const StudentWorkspace = () => {
         }
       }
       message.success("会话已删除。");
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+      message.error(e?.message || "删除会话失败");
+    }
   };
 
   const handleGenerateCapabilityProfile = async () => {

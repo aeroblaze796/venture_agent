@@ -6,6 +6,10 @@ from typing import Optional
 # 数据库文件路径
 DB_PATH = os.path.join(os.path.dirname(__file__), "venture.db")
 
+
+def get_db_connection():
+    return sqlite3.connect(DB_PATH, timeout=10)
+
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -286,7 +290,7 @@ def get_dashboard_data(user_id: str):
 # --- 会话管理函数 ---
 
 def get_conversations(user_id: str):
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db_connection()
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     cursor.execute("SELECT id, title FROM conversations WHERE user_id = ? ORDER BY created_at DESC", (user_id,))
@@ -295,7 +299,7 @@ def get_conversations(user_id: str):
     return [dict(row) for row in rows]
 
 def get_conversation_messages(conv_id: str):
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db_connection()
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     cursor.execute("SELECT role, agent, content as text FROM messages WHERE conversation_id = ? ORDER BY timestamp ASC", (conv_id,))
@@ -304,7 +308,7 @@ def get_conversation_messages(conv_id: str):
     return [dict(row) for row in rows]
 
 def save_message(conv_id: str, role: str, content: str, agent: Optional[str] = None, user_id: Optional[str] = None):
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db_connection()
     cursor = conn.cursor()
     # 仅在显式提供 user_id 时才允许兜底创建会话，避免消息误写入错误用户
     cursor.execute("SELECT COUNT(*) FROM conversations WHERE id = ?", (conv_id,))
@@ -325,7 +329,7 @@ def save_message(conv_id: str, role: str, content: str, agent: Optional[str] = N
     return True
 
 def create_conversation(conv_id: str, user_id: str, title: str, greeting: str):
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT COUNT(*) FROM conversations WHERE id = ?", (conv_id,))
     exists = cursor.fetchone()[0] > 0
@@ -340,19 +344,25 @@ def create_conversation(conv_id: str, user_id: str, title: str, greeting: str):
     conn.close()
 
 def rename_conversation(conv_id: str, new_title: str):
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("UPDATE conversations SET title = ? WHERE id = ?", (new_title, conv_id))
     conn.commit()
     conn.close()
 
 def delete_conversation(conv_id: str):
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM messages WHERE conversation_id = ?", (conv_id,))
-    cursor.execute("DELETE FROM conversations WHERE id = ?", (conv_id,))
-    conn.commit()
-    conn.close()
+    try:
+        cursor.execute("BEGIN IMMEDIATE")
+        cursor.execute("DELETE FROM messages WHERE conversation_id = ?", (conv_id,))
+        cursor.execute("DELETE FROM conversations WHERE id = ?", (conv_id,))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 if __name__ == "__main__":
     init_db()

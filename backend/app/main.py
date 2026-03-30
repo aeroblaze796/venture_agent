@@ -405,7 +405,10 @@ def rename_conv(conv_id: str, request: RenameRequest):
 
 @app.delete("/api/conversations/{conv_id}")
 def delete_conv(conv_id: str):
-    delete_conversation(conv_id)
+    try:
+        delete_conversation(conv_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"删除会话失败: {str(e)}")
     return {"status": "ok"}
 
 @app.get("/api/conversations/{conv_id}/capability-profile")
