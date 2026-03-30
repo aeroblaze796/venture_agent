@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import dayjs from "dayjs";
 import ReactMarkdown from "react-markdown";
-import { Calendar, Timeline, Badge, Tooltip, Avatar, ConfigProvider, Modal, Button, Select, Popover, List, Steps, message, Input, Space, Divider, Empty, Popconfirm, Progress } from "antd";
+import { Calendar, Timeline, Badge, Tooltip, Avatar, ConfigProvider, Modal, Button, Select, List, Steps, message, Input, Space, Divider, Empty, Popconfirm, Popover, Progress } from "antd";
 import {
   RocketOutlined,
   FileTextOutlined,
@@ -112,9 +112,12 @@ const StudentWorkspace = () => {
   const [selectedAgent, setSelectedAgent] = useState("project_coach");
   const [activePage, setActivePage] = useState("chat");
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showNotificationModal, setShowNotificationModal] = useState(false);
   const [syncData, setSyncData] = useState({
     projects: [], deadlines: [], evolution_logs: [], members: [], commits: []
   });
+  const [notifications, setNotifications] = useState([]);
+  const [notificationLoading, setNotificationLoading] = useState(false);
 
   const [history, setHistory] = useState([]);
   const [activeSessionId, setActiveSessionId] = useState(null);
@@ -218,12 +221,31 @@ const StudentWorkspace = () => {
     }
   };
 
+  const fetchNotifications = async (targetUserId) => {
+    const userId = targetUserId || localStorage.getItem("va_username");
+    if (!userId) return;
+
+    setNotificationLoading(true);
+    try {
+      const res = await fetch(buildApiUrl(`/api/student/notifications?user_id=${encodeURIComponent(userId)}`));
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      const data = await res.json();
+      setNotifications(Array.isArray(data.items) ? data.items : []);
+    } catch (e) {
+      console.error("fetchNotifications failed:", e);
+      message.error("获取通知中心数据失败");
+    } finally {
+      setNotificationLoading(false);
+    }
+  };
+
   useEffect(() => {
     const initData = async () => {
       const username = localStorage.getItem("va_username");
       if (!username) return;
       try {
         await fetchDashboardData();
+        await fetchNotifications(username);
         const res = await fetch(buildApiUrl(`/api/conversations?user_id=${username}`));
         if (res.ok) {
           const convs = await res.json();
@@ -240,6 +262,12 @@ const StudentWorkspace = () => {
     };
     initData();
   }, []);
+
+  useEffect(() => {
+    if (showNotificationModal) {
+      fetchNotifications();
+    }
+  }, [showNotificationModal]);
 
   useEffect(() => {
     if (activeProjectId) {
@@ -719,18 +747,6 @@ const StudentWorkspace = () => {
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatLog]);
   const hasActiveConversation = activePage === 'chat' && !!activeSessionId;
 
-  const notificationContent = (
-    <div className="w-80">
-      <List size="small" dataSource={[{ title: '项目初审结果已出', time: '2小时前' }, { title: '您的指导老师修改了计划书', time: '5小时前' }]} renderItem={item => (
-        <List.Item className="cursor-pointer hover:bg-slate-50 border-none px-4 py-3 rounded-xl">
-          <div className="flex flex-col gap-1 w-full"><div className="flex justify-between items-center"><span className="text-[11px] font-black text-slate-800">{item.title}</span><Badge status="processing" size="small" /></div><span className="text-[10px] text-slate-400 font-bold">{item.time}</span></div>
-        </List.Item>
-      )} />
-      <Divider className="my-2" />
-      <Button type="link" block size="small" className="text-[10px] font-black">查看全部系统消息</Button>
-    </div>
-  );
-
   return (
     <ConfigProvider theme={{ token: { primaryColor: '#2563eb', borderRadius: 16 } }}>
       <div className="flex h-screen w-full bg-[#f8f9fa] overflow-hidden font-['Inter', 'Outfit', sans-serif]">
@@ -831,12 +847,19 @@ const StudentWorkspace = () => {
               <Button 
                 type="text" 
                 icon={<SyncOutlined className={loading ? 'animate-spin' : ''} />} 
-                onClick={fetchDashboardData}
+                onClick={async () => {
+                  await fetchDashboardData();
+                  await fetchNotifications();
+                }}
                 title="同步最新数据"
               />
-              <Popover content={notificationContent} title={<span className="font-black text-sm">通知中心</span>} trigger="click" placement="bottomRight">
-                <Badge count={2} size="small" offset={[-2, 6]}><Button type="text" icon={<BellOutlined className="text-slate-400 text-lg" />} /></Badge>
-              </Popover>
+              <Badge count={notifications.length} size="small" offset={[-2, 6]}>
+                <Button
+                  type="text"
+                  icon={<BellOutlined className="text-slate-400 text-lg" />}
+                  onClick={() => setShowNotificationModal(true)}
+                />
+              </Badge>
             </div>
           </header>
 
@@ -1226,6 +1249,75 @@ const StudentWorkspace = () => {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        </Modal>
+
+        <Modal
+          title={null}
+          open={showNotificationModal}
+          onCancel={() => setShowNotificationModal(false)}
+          footer={null}
+          centered
+          width={860}
+          className="premium-modal no-border-modal"
+        >
+          <div className="p-8 space-y-6">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-black text-slate-800 m-0">通知中心</h2>
+                <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-2 mb-0">
+                  按时间由近及远显示全部教师指导建议
+                </p>
+              </div>
+              <div className="px-4 py-2 rounded-full bg-blue-50 text-blue-600 text-xs font-black uppercase tracking-widest">
+                {notifications.length} 条消息
+              </div>
+            </div>
+
+            <div className="max-h-[620px] overflow-y-auto custom-scrollbar pr-2">
+              <List
+                loading={notificationLoading}
+                dataSource={notifications}
+                locale={{
+                  emptyText: (
+                    <Empty
+                      description={<span className="text-slate-400 font-bold">暂无教师指导建议</span>}
+                    />
+                  )
+                }}
+                renderItem={(item) => (
+                  <List.Item className="border-none px-0 py-0 mb-4">
+                    <div className="w-full rounded-[28px] border border-slate-100 bg-slate-50/70 p-6 shadow-sm">
+                      <div className="flex items-start justify-between gap-4 mb-4">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap mb-2">
+                            <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">
+                              Teacher Intervention
+                            </span>
+                            <span className="px-3 py-1 rounded-full bg-indigo-50 text-indigo-600 text-[10px] font-black">
+                              {item.project_name || "未命名项目"}
+                            </span>
+                          </div>
+                          <h3 className="text-base font-black text-slate-800 m-0">
+                            {item.teacher_name || "指导教师"} 发来新的指导建议
+                          </h3>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <div className="text-[11px] font-black text-slate-500">
+                            {dayjs(item.created_at).format("YYYY-MM-DD HH:mm")}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="rounded-[22px] bg-white border border-slate-100 px-5 py-4">
+                        <p className="m-0 text-sm leading-7 text-slate-700 font-medium whitespace-pre-wrap">
+                          {item.content}
+                        </p>
+                      </div>
+                    </div>
+                  </List.Item>
+                )}
+              />
             </div>
           </div>
         </Modal>

@@ -163,6 +163,11 @@ class UpdateContentRequest(BaseModel):
     content: str
     file_id: Optional[int] = None
 
+class TeacherInterventionRequest(BaseModel):
+    project_id: int
+    teacher_name: str
+    content: str
+
 class AuditResult(BaseModel):
     r1: float = Field(description="R1 问题定义评分，1 到 5")
     r2: float = Field(description="R2 用户证据强度评分，1 到 5")
@@ -989,13 +994,55 @@ async def get_teacher_project_detail(project_id: int):
     return {"project": project, "assessment": assessment, "battle_logs": list(reversed(battle_logs))}
 
 @app.post("/api/teacher/interventions")
-async def create_teacher_intervention(project_id: int, teacher_name: str, content: str):
+async def create_teacher_intervention(request: TeacherInterventionRequest):
+    if not request.content.strip():
+        raise HTTPException(status_code=400, detail="指导建议不能为空")
+
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO teacher_interventions (project_id, teacher_name, content) VALUES (?, ?, ?)", (project_id, teacher_name, content))
+    cursor.execute(
+        "INSERT INTO teacher_interventions (project_id, teacher_name, content) VALUES (?, ?, ?)",
+        (request.project_id, request.teacher_name.strip(), request.content.strip())
+    )
     conn.commit()
     conn.close()
     return {"status": "success", "message": "干预锦囊已下发"}
+
+@app.get("/api/student/notifications")
+def get_student_notifications(user_id: str):
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT DISTINCT
+            ti.id,
+            ti.project_id,
+            p.name AS project_name,
+            ti.teacher_name,
+            ti.content,
+            ti.created_at
+        FROM teacher_interventions ti
+        JOIN projects p ON p.id = ti.project_id
+        LEFT JOIN members m ON m.project_id = p.id
+        WHERE ti.is_active = 1
+          AND (p.owner_id = ? OR m.student_id = ?)
+        ORDER BY datetime(ti.created_at) DESC, ti.id DESC
+    """, (user_id, user_id))
+
+    notifications = []
+    for row in cursor.fetchall():
+        notifications.append({
+            "id": row["id"],
+            "project_id": row["project_id"],
+            "project_name": row["project_name"],
+            "teacher_name": row["teacher_name"],
+            "content": row["content"],
+            "created_at": row["created_at"],
+        })
+
+    conn.close()
+    return {"items": notifications}
 
 @app.get("/api/teacher/intervention-generator")
 async def generate_teaching_plan(teacher_id: Optional[str] = None, teacher_name: Optional[str] = None):

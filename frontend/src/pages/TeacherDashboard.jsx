@@ -143,7 +143,10 @@ export default function TeacherDashboard() {
   };
 
   const handleSendIntervention = async () => {
-    if (!interventionText.trim() || !projectDetail) return;
+    if (!interventionText.trim() || !projectDetail) {
+      antMessage.warning("请输入指导建议后再下发");
+      return;
+    }
     try {
       const res = await fetch(buildApiUrl(`/api/teacher/interventions?project_id=${projectDetail.project.id}&teacher_name=${encodeURIComponent(teacherName)}&content=${encodeURIComponent(interventionText)}`), {
         method: 'POST'
@@ -208,6 +211,36 @@ export default function TeacherDashboard() {
   const handleLogout = () => {
     localStorage.clear();
     navigate('/');
+  };
+
+  const handleSendInterventionAction = async () => {
+    if (!interventionText.trim() || !projectDetail) {
+      antMessage.warning("请输入指导建议后再下发");
+      return;
+    }
+
+    try {
+      const res = await fetch(buildApiUrl('/api/teacher/interventions'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: projectDetail.project.id,
+          teacher_name: teacherName,
+          content: interventionText
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        antMessage.error(data.detail || data.message || "下发失败");
+        return;
+      }
+
+      antMessage.success("指导建议已下发，学生端通知中心将同步显示");
+      setInterventionText('');
+    } catch (e) {
+      antMessage.error("下发失败");
+    }
   };
 
   // 表格定义
@@ -550,7 +583,7 @@ export default function TeacherDashboard() {
                         className="bg-slate-50/50 border-none text-slate-900 rounded-[32px] focus:ring-emerald-500 text-lg p-8 flex-1 placeholder:text-slate-300 shadow-inner"
                       />
                       <div className="mt-10">
-                        <Button type="primary" size="large" block icon={<SendOutlined />} onClick={handleSendIntervention} className="bg-slate-900 hover:bg-emerald-600 border-none rounded-[24px] h-20 font-black text-lg shadow-2xl shadow-indigo-500/20 transition-all active:scale-95">
+                        <Button type="primary" size="large" block icon={<SendOutlined />} onClick={handleSendInterventionAction} className="bg-slate-900 hover:bg-emerald-600 border-none rounded-[24px] h-20 font-black text-lg shadow-2xl shadow-indigo-500/20 transition-all active:scale-95">
                           ACTIVATE INSTRUCTION
                         </Button>
                       </div>
