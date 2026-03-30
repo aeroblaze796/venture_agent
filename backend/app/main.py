@@ -984,14 +984,15 @@ async def get_teacher_project_detail(project_id: int):
     assessment = dict(pa_row) if pa_row else {}
     
     cursor.execute("""
-        SELECT role, agent, content as text, timestamp 
-        FROM messages 
-        WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = ?)
-        ORDER BY timestamp DESC LIMIT 6
-    """, (project['owner_id'],))
+        SELECT id, teacher_name, content, created_at, is_active
+        FROM teacher_interventions
+        WHERE project_id = ?
+        ORDER BY datetime(created_at) DESC, id DESC
+        LIMIT 20
+    """, (project_id,))
     battle_logs = [dict(r) for r in cursor.fetchall()]
     conn.close()
-    return {"project": project, "assessment": assessment, "battle_logs": list(reversed(battle_logs))}
+    return {"project": project, "assessment": assessment, "battle_logs": battle_logs}
 
 @app.post("/api/teacher/interventions")
 async def create_teacher_intervention(request: TeacherInterventionRequest):

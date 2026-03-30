@@ -238,6 +238,7 @@ export default function TeacherDashboard() {
 
       antMessage.success("指导建议已下发，学生端通知中心将同步显示");
       setInterventionText('');
+      await selectProject(projectDetail.project.id);
     } catch (e) {
       antMessage.error("下发失败");
     }
@@ -549,13 +550,17 @@ export default function TeacherDashboard() {
                 {/* 辅导互动区 */}
                 <div className="col-span-12 grid grid-cols-12 gap-8 mt-8">
                   <div className="col-span-7">
-                    <Card title={<span className="text-slate-800 font-black uppercase tracking-tight"><ThunderboltOutlined className="mr-2 text-indigo-500" /> Historical Battle Logs</span>} className="border-none shadow-xl rounded-[40px] h-full p-2">
+                    <Card title={<span className="text-slate-800 font-black uppercase tracking-tight"><ThunderboltOutlined className="mr-2 text-indigo-500" /> Historical Teaching Interventions</span>} className="border-none shadow-xl rounded-[40px] h-full p-2">
                        <div className="space-y-4 max-h-[500px] overflow-y-auto custom-scrollbar pr-4">
                           {projectDetail?.battle_logs?.length > 0 ? projectDetail.battle_logs.map((log, idx) => (
-                            <div key={idx} className={`p-6 rounded-[24px] text-sm relative overflow-hidden ${log.role === 'user' ? 'bg-slate-50 border border-slate-100' : 'bg-emerald-50/30 border border-emerald-100/50'}`}>
+                            <div key={idx} className={`p-6 rounded-[24px] text-sm relative overflow-hidden ${log.is_active ? 'bg-emerald-50/30 border border-emerald-100/50' : 'bg-slate-50 border border-slate-100'}`}>
                                <div className="relative z-10">
-                                 <p className="text-[9px] font-black uppercase opacity-40 mb-3 tracking-[0.2em]">{log.role === 'user' ? 'Student Inquiry' : 'Agent Diagnosis'}</p>
-                                 <div className="text-slate-800 leading-relaxed font-bold text-base">{log.text}</div>
+                                 <div className="flex items-center justify-between gap-4 mb-3">
+                                   <p className="text-[9px] font-black uppercase opacity-40 tracking-[0.2em]">Teacher Intervention</p>
+                                   <span className="text-[10px] font-black text-slate-400">{log.created_at}</span>
+                                 </div>
+                                 <div className="text-[11px] font-black text-emerald-700 mb-3">{log.teacher_name || teacherName}</div>
+                                 <div className="text-slate-800 leading-relaxed font-bold text-base whitespace-pre-wrap">{log.content}</div>
                                </div>
                             </div>
                           )) : <Empty className="py-20" description="暂无对话博弈记录" />}
