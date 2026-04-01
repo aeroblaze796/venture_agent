@@ -1,4 +1,5 @@
 import os
+import re
 from typing import Annotated, TypedDict, Any, Literal, cast
 from dotenv import load_dotenv
 from langgraph.graph import StateGraph, END
@@ -201,6 +202,12 @@ class ProjectCoachResponse(BaseModel):
     next_task: str = Field(
         description="ONLY ONE Next Task: 只能给一个、且可以立刻执行的下一步任务，不能给任务清单。任务描述可以稍微详细，但必须仍然只有一个动作目标。"
     )
+    simulated_case: str = Field(
+        description="模拟图谱段落1：编造一个看起来真实、且已经成功的相似双创项目案例。要写成一整段，说明它为什么成功，但不得声称自己真的检索了数据库。"
+    )
+    failure_inference: str = Field(
+        description="模拟图谱段落2：基于上面的成功案例，推导为什么用户当前的商业想法更容易失败。要写成一整段，形成鲜明对比。"
+    )
 
 def _get_recent_user_context(messages: list[BaseMessage], limit: int = 3) -> tuple[list[str], str]:
     """
@@ -221,6 +228,38 @@ def _get_recent_user_context(messages: list[BaseMessage], limit: int = 3) -> tup
     if limit > 0:
         prior_messages = prior_messages[-limit:]
     return prior_messages, latest_message
+
+def _normalize_line_breaks(text: str) -> str:
+    cleaned = str(text or "")
+    cleaned = cleaned.replace("<br/>", "\n").replace("<br />", "\n").replace("<br>", "\n")
+    cleaned = cleaned.replace("\\n", "\n")
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
+
+def _strip_prefixed_label(text: str, labels: list[str]) -> str:
+    cleaned = _normalize_line_breaks(text)
+    changed = True
+    while changed and cleaned:
+        changed = False
+        for label in labels:
+            pattern = rf"^\s*\*{{0,2}}\s*{re.escape(label)}\s*\*{{0,2}}\s*[:：]\s*"
+            updated = re.sub(pattern, "", cleaned, count=1, flags=re.IGNORECASE)
+            if updated != cleaned:
+                cleaned = updated.strip()
+                changed = True
+    return cleaned
+
+def _clean_project_coach_field(field_name: str, text: str) -> str:
+    aliases = {
+        "project_stage": ["Project Stage"],
+        "diagnosis": ["Diagnosis"],
+        "evidence_used": ["Evidence Used"],
+        "impact": ["Impact"],
+        "next_task": ["ONLY ONE Next Task", "Next Task"],
+        "simulated_case": ["相似成功项目", "模拟图谱段落1", "第一段"],
+        "failure_inference": ["为何你的想法更容易失败", "模拟图谱段落2", "第二段"],
+    }
+    return _strip_prefixed_label(text, aliases.get(field_name, []))
 
 def project_coach_node(state: AgentState) -> dict[str, Any]:
     print("🧠 [Coach Node] 项目教练 Agent (A2) 正在进行逻辑压测...")
@@ -252,7 +291,9 @@ def project_coach_node(state: AgentState) -> dict[str, Any]:
             "7. 在不改变五字段结构的前提下，内容要比简短点评更充实，整体篇幅要接近学习辅导 Agent 的常规回答长度。\n"
             "8. Diagnosis、Impact、ONLY ONE Next Task 这三段里，优先使用反问句或带追问感的句式，但仍要让学生明确知道你在质疑什么。\n"
             "9. 你不能给现成答案，不能替学生完成商业判断，只能指出漏洞、压测假设、逼他回去验证。\n"
-            "10. ONLY ONE Next Task 结尾最好形成一个明确的追问闭环，让学生带着数据或证据回来回答你。"
+            "10. ONLY ONE Next Task 结尾最好形成一个明确的追问闭环，让学生带着数据或证据回来回答你。\n"
+            "11. 你还必须同时生成两段“模拟图谱检索与推理过程”内容：第一段写一个你虚构的、但合理可信的成功相似项目；第二段基于这个成功项目反推学生当前想法为什么更容易失败。\n"
+            "12. 这两段模拟内容只用于前端展示推理过程，绝不能在五个正式字段里提到“我编造了案例”或“这是模拟检索”。"
         )
 
         prompt = ChatPromptTemplate.from_messages([
@@ -267,15 +308,31 @@ def project_coach_node(state: AgentState) -> dict[str, Any]:
             "latest_message": latest_user_message or "用户暂未提供有效项目描述"
         }))
 
+        project_stage = _clean_project_coach_field("project_stage", coach_resp.project_stage)
+        diagnosis = _clean_project_coach_field("diagnosis", coach_resp.diagnosis)
+        evidence_used = _clean_project_coach_field("evidence_used", coach_resp.evidence_used)
+        impact = _clean_project_coach_field("impact", coach_resp.impact)
+        next_task = _clean_project_coach_field("next_task", coach_resp.next_task)
+        simulated_case = _clean_project_coach_field("simulated_case", coach_resp.simulated_case)
+        failure_inference = _clean_project_coach_field("failure_inference", coach_resp.failure_inference)
+
         reply_content = (
-            f"**Project Stage:**\n{coach_resp.project_stage}\n\n"
-            f"**Diagnosis:**\n{coach_resp.diagnosis}\n\n"
-            f"**Evidence Used:**\n{coach_resp.evidence_used}\n\n"
-            f"**Impact:**\n{coach_resp.impact}\n\n"
-            f"**ONLY ONE Next Task:**\n{coach_resp.next_task}"
+            f"**Project Stage:**\n{project_stage}\n\n"
+            f"**Diagnosis:**\n{diagnosis}\n\n"
+            f"**Evidence Used:**\n{evidence_used}\n\n"
+            f"**Impact:**\n{impact}\n\n"
+            f"**ONLY ONE Next Task:**\n{next_task}"
         )
 
-        return {"messages": [AIMessage(content=reply_content)]}
+        reasoning_trace = (
+            f"**相似成功项目**\n{simulated_case}\n\n"
+            f"**为何你的想法更容易失败**\n{failure_inference}"
+        )
+
+        return {
+            "messages": [AIMessage(content=reply_content)],
+            "context": {"reasoning_trace": reasoning_trace}
+        }
         
     except Exception as e:
         print(f"⚠️ Coach 生成回复失败: {e}")

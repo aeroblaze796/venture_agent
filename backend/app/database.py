@@ -74,6 +74,7 @@ def init_db():
         role TEXT NOT NULL,
         agent TEXT,
         content TEXT NOT NULL,
+        reasoning_trace TEXT,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (conversation_id) REFERENCES conversations(id)
     )
@@ -227,6 +228,11 @@ def migrate_db():
     if "content" not in [row[1] for row in cursor.fetchall()]:
         cursor.execute("ALTER TABLE project_files ADD COLUMN content TEXT")
 
+    # 为消息表补充 reasoning_trace 字段，用于保存项目教练的“模拟图谱推理过程”
+    cursor.execute("PRAGMA table_info(messages)")
+    if "reasoning_trace" not in [row[1] for row in cursor.fetchall()]:
+        cursor.execute("ALTER TABLE messages ADD COLUMN reasoning_trace TEXT")
+
     conn.commit()
     conn.close()
 
@@ -302,12 +308,19 @@ def get_conversation_messages(conv_id: str):
     conn = get_db_connection()
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
-    cursor.execute("SELECT role, agent, content as text FROM messages WHERE conversation_id = ? ORDER BY timestamp ASC", (conv_id,))
+    cursor.execute("SELECT role, agent, content as text, reasoning_trace FROM messages WHERE conversation_id = ? ORDER BY timestamp ASC", (conv_id,))
     rows = cursor.fetchall()
     conn.close()
     return [dict(row) for row in rows]
 
-def save_message(conv_id: str, role: str, content: str, agent: Optional[str] = None, user_id: Optional[str] = None):
+def save_message(
+    conv_id: str,
+    role: str,
+    content: str,
+    agent: Optional[str] = None,
+    user_id: Optional[str] = None,
+    reasoning_trace: Optional[str] = None
+):
     conn = get_db_connection()
     cursor = conn.cursor()
     # 仅在显式提供 user_id 时才允许兜底创建会话，避免消息误写入错误用户
@@ -322,8 +335,10 @@ def save_message(conv_id: str, role: str, content: str, agent: Optional[str] = N
         cursor.execute("INSERT INTO conversations (id, user_id, title) VALUES (?, ?, ?)",
                        (conv_id, user_id, title))
     
-    cursor.execute("INSERT INTO messages (conversation_id, role, content, agent) VALUES (?, ?, ?, ?)",
-                   (conv_id, role, content, agent))
+    cursor.execute(
+        "INSERT INTO messages (conversation_id, role, content, agent, reasoning_trace) VALUES (?, ?, ?, ?, ?)",
+        (conv_id, role, content, agent, reasoning_trace)
+    )
     conn.commit()
     conn.close()
     return True

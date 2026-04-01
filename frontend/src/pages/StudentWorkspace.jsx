@@ -38,7 +38,9 @@ import {
   DashboardOutlined,
   FolderOpenOutlined,
   FileSearchOutlined,
-  SyncOutlined
+  SyncOutlined,
+  DownOutlined,
+  UpOutlined
 } from "@ant-design/icons";
 import "./VentureDashboard.css";
 import UserProfileModal from "../components/UserProfileModal";
@@ -122,6 +124,7 @@ const StudentWorkspace = () => {
   const [history, setHistory] = useState([]);
   const [activeSessionId, setActiveSessionId] = useState(null);
   const [chatLog, setChatLog] = useState([]);
+  const [expandedReasoning, setExpandedReasoning] = useState({});
   const [editingSessionId, setEditingSessionId] = useState(null);
   const [editSessionTitle, setEditSessionTitle] = useState("");
 
@@ -142,6 +145,13 @@ const StudentWorkspace = () => {
   const handleLogout = () => {
     localStorage.clear();
     navigate('/');
+  };
+
+  const toggleReasoning = (messageKey) => {
+    setExpandedReasoning((prev) => ({
+      ...prev,
+      [messageKey]: !prev[messageKey]
+    }));
   };
   
   // Custom modals state
@@ -511,7 +521,12 @@ const StudentWorkspace = () => {
         })
       });
       const data = await res.json();
-      setChatLog(prev => [...prev, { role: 'coach', agent: data.agent, text: data.reply }]);
+      setChatLog(prev => [...prev, {
+        role: 'coach',
+        agent: data.agent,
+        text: data.reply,
+        reasoning_trace: data.reasoning_trace || null
+      }]);
     } catch (e) {
       setChatLog(prev => [...prev, { role: 'coach', agent: '系统助手', text: '抱歉，导师暂时连不上线。' }]);
     } finally { setIsSending(false); }
@@ -875,6 +890,21 @@ const StudentWorkspace = () => {
                         <Avatar size={40} className="shadow-sm shrink-0 flex-none" style={{ backgroundColor: m.role === 'coach' ? '#2563eb' : '#f4f4f5' }} icon={m.role === 'coach' ? <RocketOutlined /> : <UserOutlined />} />
                         <div className="flex flex-col gap-1">
                           {m.role === 'coach' && <span className="text-[10px] font-black text-blue-500 px-2 bg-blue-50 rounded-lg">{m.agent}</span>}
+                          {m.role === 'coach' && m.agent === '项目教练 Agent (A2)' && m.reasoning_trace && (
+                            <button
+                              type="button"
+                              onClick={() => toggleReasoning(`coach-${i}`)}
+                              className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-slate-500 transition-colors px-1 py-0.5 text-left"
+                            >
+                              <span>展示图谱检索与推理过程</span>
+                              {expandedReasoning[`coach-${i}`] ? <UpOutlined className="text-[10px]" /> : <DownOutlined className="text-[10px]" />}
+                            </button>
+                          )}
+                          {m.role === 'coach' && m.agent === '项目教练 Agent (A2)' && m.reasoning_trace && expandedReasoning[`coach-${i}`] && (
+                            <div className="rounded-2xl bg-slate-50 border border-slate-200 px-4 py-3 text-[12px] leading-6 text-slate-500">
+                              <ReactMarkdown>{m.reasoning_trace}</ReactMarkdown>
+                            </div>
+                          )}
                           <div className={`message-bubble ${m.role === 'user' ? 'user-bubble' : 'bot-bubble'}`}>
                             {m.role === 'coach' ? <ReactMarkdown>{m.text}</ReactMarkdown> : <p className="m-0 font-medium">{m.text}</p>}
                           </div>
