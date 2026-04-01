@@ -88,6 +88,10 @@ body {
     line-height: 1.6;
 }
 
+.ant-avatar {
+    flex-shrink: 0;
+}
+
 .bot-bubble {
     background: transparent;
     border: none;
