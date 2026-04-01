@@ -331,6 +331,19 @@ def extract_json_payload(raw_content) -> dict:
         raise ValueError("LLM 未返回 JSON 对象")
     return payload
 
+def normalize_evidence_trace(text: str) -> str:
+    normalized = str(text or "").replace("\r", "")
+    normalized = normalized.replace("<br/>", "\n").replace("<br />", "\n").replace("<br>", "\n")
+    normalized = normalized.strip()
+    if not normalized:
+        return ""
+
+    import re
+
+    normalized = re.sub(r"\s+(?=(?:\d+[\.、\)])|(?:[①②③④⑤⑥⑦⑧⑨⑩]))", "\n\n", normalized)
+    normalized = re.sub(r"\n{3,}", "\n\n", normalized)
+    return normalized.strip()
+
 # --- Endpoints ---
 
 @app.on_event("startup")
@@ -939,9 +952,16 @@ async def trigger_ai_audit(project_id: int):
 3. audit_summary 面向指导教师，150 字以内，重点指出项目在核心逻辑、商业模式、竞争壁垒、单位经济性等方面最关键的问题，并给出一条最值得优先干预的建议。
 4. audit_summary 中必须显式写出 1 到 3 个最关键的 H 原则编号，例如 H1、H6、H8，建议放在开头或句中明确点出，便于后续统计高频商业逻辑盲区。
 5. evidence_trace 必须填写，且不能是空字符串。
-6. evidence_trace 必须直接引用项目原文中的 1 到 3 处关键片段，尽量保留原句或原短语，再解释这些片段为什么能支撑你的判断，做到“判卷有理有据”。
-7. 不要编造项目中没有出现过的事实；如果材料不足，就明确指出“材料缺失”本身也是证据。
-8. 只返回结构化结果，不要输出额外说明。
+6. evidence_trace 必须直接引用项目原文中的 1 到 3 处关键片段，优先引用更完整、更长的原文，不要只摘一个短词；每条引用尽量达到 20 到 60 个汉字。
+7. evidence_trace 必须严格使用编号分条书写，例如：
+   1. 原文引用：……
+      评审说明：……
+   2. 原文引用：……
+      评审说明：……
+8. 每一条中的“评审说明”都要写得更充分，至少 40 到 80 个汉字，解释这段原文为什么支撑你的判断，而不是只写一句结论。
+9. 如果材料不足，就明确指出“材料缺失”本身也是证据，但仍要按编号分条输出。
+10. 不要编造项目中没有出现过的事实。
+11. 只返回结构化结果，不要输出额外说明。
 """
 
         audit_result = structured_llm.invoke(prompt)
@@ -952,7 +972,7 @@ async def trigger_ai_audit(project_id: int):
         else:
             raise ValueError("AI 审计结果格式异常")
 
-        evidence_trace = str(res_data.get("evidence_trace", "")).strip()
+        evidence_trace = normalize_evidence_trace(str(res_data.get("evidence_trace", "")).strip())
         if not evidence_trace:
             raise ValueError("AI 审计结果缺少 evidence_trace")
         res_data["evidence_trace"] = evidence_trace

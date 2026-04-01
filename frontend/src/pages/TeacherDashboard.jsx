@@ -71,6 +71,35 @@ const RadarChart = ({ data }) => {
   );
 };
 
+const RUBRIC_DIMENSIONS = [
+  { label: 'R1 问题定义', key: 'r1_score' },
+  { label: 'R2 用户证据', key: 'r2_score' },
+  { label: 'R3 方案可行性', key: 'r3_score' },
+  { label: 'R4 商业模式', key: 'r4_score' },
+  { label: 'R5 市场竞争', key: 'r5_score' },
+  { label: 'R6 财务逻辑', key: 'r6_score' },
+  { label: 'R7 创新差异化', key: 'r7_score' },
+  { label: 'R8 团队执行力', key: 'r8_score' },
+  { label: 'R9 表达材料', key: 'r9_score' }
+];
+
+const formatEvidenceTrace = (trace) => {
+  const normalized = String(trace || '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/\r/g, '')
+    .replace(/\s+(?=(?:\d+[\.、\)])|(?:[①②③④⑤⑥⑦⑧⑨⑩]))/g, '\n\n')
+    .trim();
+
+  if (!normalized) return [];
+
+  const numberedLines = normalized
+    .split(/\n{2,}/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  return numberedLines.length > 0 ? numberedLines : [normalized];
+};
+
 export default function TeacherDashboard() {
   const navigate = useNavigate();
   const [activeMenu, setActiveMenu] = useState('overview'); // 'overview' 或 项目ID
@@ -276,6 +305,8 @@ export default function TeacherDashboard() {
     }
   ];
 
+  const evidenceTraceLines = formatEvidenceTrace(projectDetail?.assessment?.evidence_trace);
+
   return (
     <div className="flex h-screen bg-[#0f172a] font-sans overflow-hidden">
       
@@ -463,9 +494,9 @@ export default function TeacherDashboard() {
                 {/* 核心整合：全景评估中心 */}
                 <div className="col-span-12">
                   <Card className="border-none shadow-xl rounded-[40px] overflow-hidden bg-white p-2">
-                    <div className="grid grid-cols-12 gap-0">
-                      {/* 左侧：多维雷达与风险定级 */}
-                      <div className="col-span-4 border-r border-slate-100 p-10 flex flex-col items-center justify-center bg-slate-50/50 rounded-l-[32px]">
+                    <div className="grid grid-cols-12 gap-8 p-6">
+                      {/* 第一行左侧：多维雷达与风险定级 */}
+                      <div className="col-span-6 p-10 flex flex-col items-center justify-center bg-slate-50/60 rounded-[32px] border border-slate-100">
                         <h4 className="text-slate-400 text-[10px] font-black uppercase tracking-[0.3em] mb-10">Matrix Analysis</h4>
                         <div className="relative">
                            <RadarChart data={projectDetail?.assessment} />
@@ -480,23 +511,18 @@ export default function TeacherDashboard() {
                         <p className="mt-12 text-[10px] text-slate-400 font-black uppercase tracking-widest text-center">R1-R9 Structural Model</p>
                       </div>
 
-                      {/* 中间：细分维度评分 */}
-                      <div className="col-span-3 p-10 flex flex-col justify-center border-r border-slate-100">
+                      {/* 第一行右侧：全部维度评分 */}
+                      <div className="col-span-6 p-10 flex flex-col justify-center bg-white rounded-[32px] border border-slate-100">
                         <h4 className="text-slate-800 text-sm font-black mb-8 flex items-center gap-2">
                           <LineChartOutlined className="text-emerald-500" /> 维度透视
                         </h4>
-                        <div className="space-y-6">
-                          {[
-                            { label: 'R1 创新性', key: 'r1_score' },
-                            { label: 'R2 可靠度', key: 'r2_score' },
-                            { label: 'R8 盈利力', key: 'r8_score' },
-                            { label: 'R9 团队力', key: 'r9_score' }
-                          ].map((r, i) => {
+                        <div className="grid grid-cols-3 gap-x-6 gap-y-6">
+                          {RUBRIC_DIMENSIONS.map((r, i) => {
                             const val = projectDetail?.assessment?.[r.key] || 0;
                             return (
-                              <div key={i} className="flex flex-col">
+                              <div key={i} className="flex flex-col min-w-0">
                                 <div className="flex justify-between text-[11px] mb-2 font-black text-slate-500 uppercase tracking-tighter">
-                                  <span>{r.label}</span>
+                                  <span className="pr-3 leading-4">{r.label}</span>
                                   <span className="text-slate-900">{val.toFixed(1)}</span>
                                 </div>
                                 <Progress percent={val * 20} strokeColor={val >= 4 ? '#10b981' : val >= 2.5 ? '#f59e0b' : '#ef4444'} showInfo={false} strokeWidth={8} className="rounded-full" />
@@ -506,8 +532,8 @@ export default function TeacherDashboard() {
                         </div>
                       </div>
 
-                      {/* 右侧：导师专线审计报告 */}
-                      <div className="col-span-5 p-10 bg-slate-900 text-white rounded-r-[32px] relative overflow-hidden flex flex-col">
+                      {/* 第二行左侧：导师专线审计报告 */}
+                      <div className="col-span-6 p-10 bg-slate-900 text-white rounded-[32px] relative overflow-hidden flex flex-col min-h-[420px]">
                         <RobotOutlined className="absolute -right-10 -bottom-10 text-white/5 text-[240px] transform rotate-12" />
                         <div className="relative z-10 flex flex-col h-full">
                           <div className="flex justify-between items-start mb-8">
@@ -524,15 +550,7 @@ export default function TeacherDashboard() {
                              <div className="text-lg leading-relaxed font-semibold text-slate-100 italic">
                                "{projectDetail?.assessment?.audit_summary || '暂无深度审计报告。作为指导老师，您可以点击下方按钮启动 Agent 对项目底层逻辑的穿透式审计。评分与报告将基于 H 原则与 R 体系自动生成。'}"
                              </div>
-                             {projectDetail?.assessment?.evidence_trace && (
-                               <div className="mt-6 pt-6 border-t border-white/10 z-20 relative">
-                                 <p className="text-xs text-emerald-400 font-bold mb-3 flex items-center gap-2 uppercase tracking-widest"><FileSearchOutlined /> 漏洞原文溯源 (Evidence Trace)</p>
-                                 <div className="text-sm text-slate-300 bg-black/30 p-5 rounded-2xl font-mono leading-relaxed border border-white/5 shadow-inner">
-                                   {projectDetail.assessment.evidence_trace}
-                                 </div>
-                               </div>
-                             )}
-                             <div className="absolute top-4 right-6 text-4xl text-white/10 opacity-50 font-serif z-0">“</div>
+                             <div className="absolute top-4 right-6 text-4xl text-white/10 opacity-50 font-serif z-0">"</div>
                           </div>
 
                           <div className="pt-6 border-t border-white/5 flex items-center justify-between">
@@ -541,6 +559,27 @@ export default function TeacherDashboard() {
                               EXECUTE RE-AUDIT
                             </Button>
                           </div>
+                        </div>
+                      </div>
+
+                      {/* 第二行右侧：证据溯源 */}
+                      <div className="col-span-6 p-10 bg-slate-50/80 rounded-[32px] border border-slate-100 flex flex-col min-h-[420px]">
+                        <div className="flex items-center justify-between mb-8">
+                          <h4 className="text-slate-800 text-xs font-black uppercase tracking-widest flex items-center gap-2">
+                            <FileSearchOutlined className="text-emerald-500" /> 漏洞原文溯源 (Evidence Trace)
+                          </h4>
+                          <Tag color="geekblue" className="rounded-full border-none px-3 font-bold">Source Anchors</Tag>
+                        </div>
+                        <div className="flex-1 max-h-[560px] text-sm text-slate-600 bg-white p-6 rounded-[28px] leading-8 border border-slate-100 shadow-inner overflow-y-auto custom-scrollbar">
+                          {evidenceTraceLines.length > 0 ? evidenceTraceLines.map((line, idx) => (
+                            <div key={idx} className="mb-5 last:mb-0">
+                              <p className="m-0 whitespace-pre-wrap">
+                                {line}
+                              </p>
+                            </div>
+                          )) : (
+                            <Empty className="py-16" description="暂无原文证据溯源" />
+                          )}
                         </div>
                       </div>
                     </div>
