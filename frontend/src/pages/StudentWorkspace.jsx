@@ -153,6 +153,12 @@ const StudentWorkspace = () => {
       [messageKey]: !prev[messageKey]
     }));
   };
+
+  const shouldShowReasoning = (message) => (
+    message?.role === 'coach'
+    && !!message?.reasoning_trace
+    && (message?.agent === '项目教练 Agent (A2)' || message?.agent === '学习辅导 Agent (A1)')
+  );
   
   // Custom modals state
   const [showRubricModal, setShowRubricModal] = useState(false);
@@ -890,7 +896,7 @@ const StudentWorkspace = () => {
                         <Avatar size={40} className="shadow-sm shrink-0 flex-none" style={{ backgroundColor: m.role === 'coach' ? '#2563eb' : '#f4f4f5' }} icon={m.role === 'coach' ? <RocketOutlined /> : <UserOutlined />} />
                         <div className="flex flex-col gap-1">
                           {m.role === 'coach' && <span className="text-[10px] font-black text-blue-500 px-2 bg-blue-50 rounded-lg">{m.agent}</span>}
-                          {m.role === 'coach' && m.agent === '项目教练 Agent (A2)' && m.reasoning_trace && (
+                          {shouldShowReasoning(m) && (
                             <button
                               type="button"
                               onClick={() => toggleReasoning(`coach-${i}`)}
@@ -900,7 +906,7 @@ const StudentWorkspace = () => {
                               {expandedReasoning[`coach-${i}`] ? <UpOutlined className="text-[10px]" /> : <DownOutlined className="text-[10px]" />}
                             </button>
                           )}
-                          {m.role === 'coach' && m.agent === '项目教练 Agent (A2)' && m.reasoning_trace && expandedReasoning[`coach-${i}`] && (
+                          {shouldShowReasoning(m) && expandedReasoning[`coach-${i}`] && (
                             <div className="rounded-2xl bg-slate-50 border border-slate-200 px-4 py-3 text-[12px] leading-6 text-slate-500">
                               <ReactMarkdown>{m.reasoning_trace}</ReactMarkdown>
                             </div>

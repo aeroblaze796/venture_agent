@@ -124,6 +124,12 @@ class TutorResponse(BaseModel):
     evaluation_criteria: str | None = Field(
         description="(非代写请求时提供) Evaluation Criteria: 对于该产出物的评价标准。"
     )
+    classic_case: str | None = Field(
+        description="(非代写请求时提供) 模拟图谱段落1：给出一个广为人知、适合解释该概念的经典案例。写成一整段，不要声称自己检索了数据库。"
+    )
+    concept_bridge: str | None = Field(
+        description="(非代写请求时提供) 模拟图谱段落2：从上述经典案例出发，回到学生的问题，用通俗语言解释他不懂的概念。写成一整段。"
+    )
 
 def learning_tutor_node(state: AgentState) -> dict[str, Any]:
     print("👨‍🏫 [Tutor Node] 学习辅导 Agent (A1) 正在生成回复...")
@@ -148,7 +154,11 @@ def learning_tutor_node(state: AgentState) -> dict[str, Any]:
             "4. 实操任务 (仅限一个具体微任务，注意：你的文本里绝不能包含'Practice Task'英文字母，以免计次冲突)\n"
             "5. Expected Artifact (要求产出物)\n"
             "6. Evaluation Criteria (评价标准)\n"
-            "语气要像一位耐心、鼓励学生的导师。"
+            "语气要像一位耐心、鼓励学生的导师。\n"
+            "此外，你还必须额外生成两段仅用于前端展示“图谱检索与推理过程”的内容：\n"
+            "- 第一段：给出一个广为人知的经典案例，用于帮助理解这个概念。\n"
+            "- 第二段：从这个案例出发，回到学生的问题，用更通俗的方式讲清这个概念。\n"
+            "这两段内容不能混入正式回答的六个字段中。"
         )
         
         prompt = ChatPromptTemplate.from_messages([
@@ -164,6 +174,7 @@ def learning_tutor_node(state: AgentState) -> dict[str, Any]:
         if tutor_resp.is_refusal:
             questions_text = "\n".join([f"- {q}" for q in (tutor_resp.socratic_questions or [])])
             reply_content = f"**⚠️ 拒绝代写提醒**\n\n{tutor_resp.refusal_reason}\n\n**🤔 启发思考**\n\n{questions_text}"
+            reasoning_trace = None
         else:
             practice_task_content = tutor_resp.practice_task or ""
             if "Practice Task" in practice_task_content:
@@ -177,9 +188,26 @@ def learning_tutor_node(state: AgentState) -> dict[str, Any]:
                 f"**Expected Artifact:**\n{tutor_resp.expected_artifact}\n\n"
                 f"**Evaluation Criteria:**\n{tutor_resp.evaluation_criteria}"
             )
+            classic_case = _strip_prefixed_label(
+                tutor_resp.classic_case or "",
+                ["经典案例", "广为人知的案例", "模拟图谱段落1", "第一段"]
+            )
+            concept_bridge = _strip_prefixed_label(
+                tutor_resp.concept_bridge or "",
+                ["从案例回到概念", "概念讲解", "模拟图谱段落2", "第二段"]
+            )
+            reasoning_trace = None
+            if classic_case or concept_bridge:
+                reasoning_trace = (
+                    f"**经典案例**\n{classic_case}\n\n"
+                    f"**从案例理解这个概念**\n{concept_bridge}"
+                ).strip()
         
         response_msg = AIMessage(content=reply_content)
-        return {"messages": [response_msg]}
+        result: dict[str, Any] = {"messages": [response_msg]}
+        if reasoning_trace:
+            result["context"] = {"reasoning_trace": reasoning_trace}
+        return result
         
     except Exception as e:
         print(f"⚠️ Tutor 生成回复失败: {e}")
