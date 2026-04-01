@@ -8,8 +8,6 @@ from langgraph.checkpoint.memory import MemorySaver
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field, SecretStr
-from app.agent.constraints import constraints_engine
-from app.agent.tools import query_neo4j_for_projects
 
 # 读取环境变量
 load_dotenv()
@@ -187,66 +185,97 @@ def learning_tutor_node(state: AgentState) -> dict[str, Any]:
         error_msg = AIMessage(content="【学习辅导 Agent (A1)】抱歉，我目前的大脑线路遇到了一点小的干扰，你可以稍后再试。")
         return {"messages": [error_msg]}
 
+class ProjectCoachResponse(BaseModel):
+    project_stage: str = Field(
+        description="Project Stage: 用2到3句话判断项目所处阶段，例如'idea stage'、'problem validation stage'、'early solution stage'。要说明项目为什么还停留在这个阶段。"
+    )
+    diagnosis: str = Field(
+        description="Diagnosis: 只指出当前最核心的一个逻辑问题，展开写成较完整的一段。语气要凌厉，尽量多用反问句推进学生思考，但不要扩展成多个并列问题。"
+    )
+    evidence_used: str = Field(
+        description="Evidence Used: 只引用或转述用户输入中的2到3处关键信息，说明你为什么得出这个判断。可以逐点拆开，但不得使用外部信息。"
+    )
+    impact: str = Field(
+        description="Impact: 说明这个核心问题如果不解决，会带来什么后果。写得更具体一些，点出路演、验证、获客、交付或生存层面的风险。"
+    )
+    next_task: str = Field(
+        description="ONLY ONE Next Task: 只能给一个、且可以立刻执行的下一步任务，不能给任务清单。任务描述可以稍微详细，但必须仍然只有一个动作目标。"
+    )
+
+def _get_recent_user_context(messages: list[BaseMessage], limit: int = 3) -> tuple[list[str], str]:
+    """
+    仅提取最近几轮用户消息，避免项目教练被 Tutor 或既有 AI 回复的格式污染。
+    返回 (历史用户消息列表, 当前用户消息)。
+    """
+    human_messages = [
+        msg.content if isinstance(msg.content, str) else str(msg.content)
+        for msg in messages
+        if isinstance(msg, HumanMessage)
+    ]
+
+    if not human_messages:
+        return [], ""
+
+    latest_message = human_messages[-1].strip()
+    prior_messages = [msg.strip() for msg in human_messages[:-1] if str(msg).strip()]
+    if limit > 0:
+        prior_messages = prior_messages[-limit:]
+    return prior_messages, latest_message
+
 def project_coach_node(state: AgentState) -> dict[str, Any]:
     print("🧠 [Coach Node] 项目教练 Agent (A2) 正在进行逻辑压测...")
     messages = state.get("messages", [])
-    raw_content = messages[-1].content if messages else ""
-    last_message = raw_content if isinstance(raw_content, str) else str(raw_content)
+    prior_user_messages, latest_user_message = _get_recent_user_context(messages)
     
     try:
         llm = get_llm()
-        
-        # 1. 运行前置安全护栏 (Constraints Engine)
-        warnings = constraints_engine.run_audit(last_message)
-        warning_text = "\n".join(warnings) if warnings else "无预警项"
-        if warnings:
-            print(f"⚠️ [护栏拦截触发] 共 {len(warnings)} 项商业规则违背")
-            
-        # 2. 从图数据库检索相似案例 (GraphRAG)
-        # MVP 阶段使用大模型快速提取短小的核心业务关键词，替代粗暴文本切片
-        class KeywordExtraction(BaseModel):
-            keyword: str = Field(description="从学生的输入中提取最核心的【项目产品名词】或【业务方向】（如'数据湖'，'外卖代拿'）。不得超过8个字，如果有多个词，只选最核心的一个词。")
-            
-        extractor = llm.with_structured_output(KeywordExtraction)
-        extraction = cast(KeywordExtraction, extractor.invoke([
-            ("system", "你负责从学生的话语中提取核心商业实体以供Neo4j查询。"),
-            ("human", f"句子：{last_message}")
-        ]))
-        keyword = extraction.keyword
-        
-        rag_context = query_neo4j_for_projects(keyword)
-        print(f"🔍 [GraphRAG 检索完成] 提取关键词: {keyword}")
-        print(f"   [检索内容]:\n{rag_context}\n")
-        
-        # 针对 A2 的核心人设与指引 (毒舌、苏格拉底式发问)
+        structured_llm = llm.with_structured_output(ProjectCoachResponse)
+
+        prior_context_text = "\n".join(
+            f"- 历史用户消息 {index + 1}: {content}"
+            for index, content in enumerate(prior_user_messages)
+        ) or "无"
+
         system_prompt = (
             "你是一个名为 VentureAgent 的高级项目教练 (Project Coach, A2)。\n"
             "来找你的通常是带着具体项目想法的学生创业团队。\n"
-            "你的核心职责是对他们的商业模式或项目想法进行【深度防御性压测】，找出致命逻辑漏洞。\n"
-            "你的工作准则：\n"
-            "1. 【绝不直接给答案】：使用苏格拉底式提问，引导他们自己发现问题。\n"
-            "2. 【一针见血】：每次回复只指出1个（最多2个）最核心的痛点或逻辑伪命题。\n"
-            "3. 引入竞争残酷性，比如假设巨头入场、或者资金链断裂的压力测试。\n"
-            "4. 语气可以带有威严，甚至有些“毒舌”，像是参加严厉的风险投资路演环节。\n"
-            "5. 在提问的最后，要求对方针对你提出的漏洞给出具体的防御方案或数据证明。\n\n"
-            "【以下是系统后台传递给你的诊断信息，请作为你压测的重点依据（不要直接暴露给学生这是系统提示的）】:\n"
-            "护栏规则预警: {warning_text}\n"
-            "图数据库检索出的对标项目与价值闭环: {rag_context}"
+            "你的任务是对项目进行一针见血的诊断，但不能直接代替学生完成商业方案。\n"
+            "你的说话风格必须像一个严厉、老练、几乎不留情面的投资人或答辩评委：凌厉、压迫感强、善于反问。\n"
+            "你应该尽量使用苏格拉底式追问来逼学生自己看见漏洞，而不是温和解释或直接替他补方案。\n\n"
+            "严格要求：\n"
+            "1. 你必须只输出 5 个字段对应的内容：Project Stage、Diagnosis、Evidence Used、Impact、ONLY ONE Next Task。\n"
+            "2. 你一次只能指出 1 个最核心的问题，不能扩展成多个并列问题。\n"
+            "3. Evidence Used 只能基于用户输入，不得编造外部案例、图谱信息或数据库内容。\n"
+            "4. ONLY ONE Next Task 必须严格只有 1 个可执行任务，不能再附加第二个动作。\n"
+            "5. 保持专业、直接、克制，不要输出 Definition、Example、Common Mistakes、Practice Task 等其他字段。\n"
+            "6. 如果历史消息与当前消息冲突，以当前消息为准。\n"
+            "7. 在不改变五字段结构的前提下，内容要比简短点评更充实，整体篇幅要接近学习辅导 Agent 的常规回答长度。\n"
+            "8. Diagnosis、Impact、ONLY ONE Next Task 这三段里，优先使用反问句或带追问感的句式，但仍要让学生明确知道你在质疑什么。\n"
+            "9. 你不能给现成答案，不能替学生完成商业判断，只能指出漏洞、压测假设、逼他回去验证。\n"
+            "10. ONLY ONE Next Task 结尾最好形成一个明确的追问闭环，让学生带着数据或证据回来回答你。"
         )
-        
+
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
-            ("placeholder", "{messages}")
+            ("human", "最近历史用户消息（仅供补充上下文，不代表最终结论）：\n{prior_context}"),
+            ("human", "当前用户消息：\n{latest_message}")
         ])
-        
-        chain = prompt | llm
-        response_msg = chain.invoke({
-            "messages": messages,
-            "warning_text": warning_text,
-            "rag_context": rag_context
-        })
-        
-        return {"messages": [response_msg]}
+
+        chain = prompt | structured_llm
+        coach_resp = cast(ProjectCoachResponse, chain.invoke({
+            "prior_context": prior_context_text,
+            "latest_message": latest_user_message or "用户暂未提供有效项目描述"
+        }))
+
+        reply_content = (
+            f"**Project Stage:**\n{coach_resp.project_stage}\n\n"
+            f"**Diagnosis:**\n{coach_resp.diagnosis}\n\n"
+            f"**Evidence Used:**\n{coach_resp.evidence_used}\n\n"
+            f"**Impact:**\n{coach_resp.impact}\n\n"
+            f"**ONLY ONE Next Task:**\n{coach_resp.next_task}"
+        )
+
+        return {"messages": [AIMessage(content=reply_content)]}
         
     except Exception as e:
         print(f"⚠️ Coach 生成回复失败: {e}")
