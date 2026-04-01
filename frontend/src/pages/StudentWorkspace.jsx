@@ -188,6 +188,7 @@ const StudentWorkspace = () => {
   const [loading, setLoading] = useState(false);
   const [capabilityProfile, setCapabilityProfile] = useState(null);
   const [capabilityProfileLoading, setCapabilityProfileLoading] = useState(false);
+  const hasProjectDocumentView = !!editorContent || projectFiles.length > 0 || !!activeFileUrl;
 
   const capabilityRadarData = CAPABILITY_DIMENSIONS.map(({ key, label }) => ({
     key,
@@ -222,10 +223,18 @@ const StudentWorkspace = () => {
       const data = await res.json();
       if (data && data.projects) {
         setSyncData(data);
-        if (activeProjectId) {
-          await fetchProjectFiles(activeProjectId);
-          const curProj = (data.projects || []).find(p => p.id === activeProjectId);
-          if (curProj && !activeFileId) setEditorContent(curProj.content || "");
+        const storedProjectId = Number(localStorage.getItem("va_active_project_id") || "");
+        const candidateProjectId = activeProjectId || (Number.isFinite(storedProjectId) ? storedProjectId : null);
+        if (candidateProjectId && (data.projects || []).some(p => p.id === candidateProjectId)) {
+          if (activeProjectId !== candidateProjectId) setActiveProjectId(candidateProjectId);
+          await fetchProjectFiles(candidateProjectId, { autoSelectLatest: true });
+          const curProj = (data.projects || []).find(p => p.id === candidateProjectId);
+          if (curProj && !activeFileId && !(projectFiles || []).length) setEditorContent(curProj.content || "");
+        } else if (!activeProjectId && (data.projects || []).length > 0) {
+          const firstProjectId = data.projects[0].id;
+          setActiveProjectId(firstProjectId);
+          localStorage.setItem("va_active_project_id", String(firstProjectId));
+          await fetchProjectFiles(firstProjectId, { autoSelectLatest: true });
         }
       }
     } catch (e) {
@@ -289,6 +298,7 @@ const StudentWorkspace = () => {
 
   useEffect(() => {
     if (activeProjectId) {
+      localStorage.setItem("va_active_project_id", String(activeProjectId));
       const isProjectChanged = prevProjectIdRef.current !== activeProjectId;
       const proj = (syncData.projects || []).find(p => p.id === activeProjectId);
       
@@ -298,13 +308,14 @@ const StudentWorkspace = () => {
         setActiveFileId(null);
         setActiveFileUrl(null);
         setProjectFiles([]);
-        fetchProjectFiles(activeProjectId);
+        fetchProjectFiles(activeProjectId, { autoSelectLatest: true });
         prevProjectIdRef.current = activeProjectId;
       } else if (!activeFileId) {
         // 同一项目内刷新，且未在预览文件时，更新编辑器内容
         if (proj) setEditorContent(proj.content || "");
       }
     } else {
+      localStorage.removeItem("va_active_project_id");
       prevProjectIdRef.current = null;
     }
   }, [activeProjectId, syncData.projects, activeFileId]);
@@ -331,28 +342,38 @@ const StudentWorkspace = () => {
     return () => clearTimeout(timer);
   }, [editorContent, activeProjectId]);
 
-  const fetchProjectFiles = async (id) => {
+  const fetchProjectFiles = async (id, options = {}) => {
     try {
       const res = await fetch(buildApiUrl(`/api/projects/${id}/files`));
       if (res.ok) {
         const files = await res.json();
         setProjectFiles(files);
+        if (options.autoSelectLatest && Array.isArray(files) && files.length > 0) {
+          const latestFile = files[0];
+          setActiveFileUrl(latestFile.file_url || null);
+          await handleFileTabChange(latestFile.id, { projectIdOverride: id, skipFileUrlUpdate: true });
+        }
+        return files;
       }
     } catch (e) { console.error("Fetch files failed:", e); }
+    return [];
   };
 
-  const handleFileTabChange = async (fileId) => {
+  const handleFileTabChange = async (fileId, options = {}) => {
+    const targetProjectId = options.projectIdOverride || activeProjectId;
     if (fileId === null) {
-      const proj = (syncData.projects || []).find(p => p.id === activeProjectId);
+      const proj = (syncData.projects || []).find(p => p.id === targetProjectId);
       setEditorContent(proj?.content || "");
       setActiveFileId(null);
+      setActiveFileUrl(null);
     } else {
       try {
-        const res = await fetch(buildApiUrl(`/api/projects/${activeProjectId}/files/${fileId}`));
+        const res = await fetch(buildApiUrl(`/api/projects/${targetProjectId}/files/${fileId}`));
         if (res.ok) {
           const data = await res.json();
           setEditorContent(data.content);
           setActiveFileId(fileId);
+          if (!options.skipFileUrlUpdate) setActiveFileUrl(data.file_url || null);
         }
       } catch (e) { message.error("获取文件内容失败"); }
     }
@@ -1005,7 +1026,7 @@ const StudentWorkspace = () => {
                     <div className="min-h-[700px] editor-surface relative overflow-hidden flex flex-col">
                       <div className="absolute top-0 left-0 w-2 h-full bg-indigo-500/10 z-0"></div>
                       <div className="flex-1 p-12 z-10 flex flex-col">
-                        {editorContent ? (
+                        {hasProjectDocumentView ? (
                           <div className="prose prose-slate max-w-none flex-1 flex flex-col">
                             {/* 工具栏与多文件标签 */}
                               <div className="flex items-center justify-between mb-4">

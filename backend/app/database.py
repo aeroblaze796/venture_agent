@@ -244,9 +244,20 @@ def get_dashboard_data(user_id: str):
     
     # 1. 获取用户参与的所有项目 (作为 Owner 或 成员)
     cursor.execute("""
-        SELECT DISTINCT p.* FROM projects p
+        SELECT DISTINCT p.*,
+               (
+                   SELECT MAX(datetime(pf.created_at))
+                   FROM project_files pf
+                   WHERE pf.project_id = p.id
+               ) AS latest_file_created_at
+        FROM projects p
         LEFT JOIN members m ON p.id = m.project_id
         WHERE p.owner_id = ? OR m.student_id = ?
+        ORDER BY
+            CASE WHEN latest_file_created_at IS NULL THEN 1 ELSE 0 END,
+            latest_file_created_at DESC,
+            datetime(p.created_at) DESC,
+            p.id DESC
     """, (user_id, user_id))
     projects_rows = cursor.fetchall()
     

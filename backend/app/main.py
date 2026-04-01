@@ -680,12 +680,45 @@ async def import_project_file(file: UploadFile = File(...), project_id: Optional
     
     if project_id is not None:
         conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         cur.execute(
-            "INSERT INTO project_files (project_id, filename, file_url, content) VALUES (?, ?, ?, ?)",
-            (project_id, filename, file_url, content)
+            """
+            SELECT id, file_url
+            FROM project_files
+            WHERE project_id = ? AND filename = ?
+            ORDER BY datetime(created_at) DESC, id DESC
+            LIMIT 1
+            """,
+            (project_id, filename)
         )
-        file_id = cur.lastrowid
+        existing_file = cur.fetchone()
+
+        if existing_file:
+            old_file_url = existing_file["file_url"]
+            try:
+                filename_part = old_file_url.split("/api/uploads/")[-1]
+                old_path = os.path.join(UPLOAD_DIR, filename_part)
+                if os.path.exists(old_path):
+                    os.remove(old_path)
+            except Exception as cleanup_error:
+                print(f"Failed to remove old uploaded file for overwrite: {cleanup_error}")
+
+            cur.execute(
+                """
+                UPDATE project_files
+                SET file_url = ?, content = ?, created_at = CURRENT_TIMESTAMP
+                WHERE id = ? AND project_id = ?
+                """,
+                (file_url, content, existing_file["id"], project_id)
+            )
+            file_id = existing_file["id"]
+        else:
+            cur.execute(
+                "INSERT INTO project_files (project_id, filename, file_url, content) VALUES (?, ?, ?, ?)",
+                (project_id, filename, file_url, content)
+            )
+            file_id = cur.lastrowid
         conn.commit()
         conn.close()
 
