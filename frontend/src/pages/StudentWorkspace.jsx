@@ -107,6 +107,97 @@ const RadarChart = ({ data = [], size = 180 }) => {
   );
 };
 
+const REASONING_GRAPH_NODE_STYLES = {
+  question: "fill-blue-50 stroke-blue-200 text-blue-700",
+  case: "fill-emerald-50 stroke-emerald-200 text-emerald-700",
+  concept: "fill-violet-50 stroke-violet-200 text-violet-700",
+  mechanism: "fill-amber-50 stroke-amber-200 text-amber-700",
+  misconception: "fill-rose-50 stroke-rose-200 text-rose-700",
+  action: "fill-cyan-50 stroke-cyan-200 text-cyan-700",
+  bridge: "fill-slate-50 stroke-slate-200 text-slate-700"
+};
+
+const ReasoningGraphPanel = ({ graph }) => {
+  const nodes = Array.isArray(graph?.nodes) ? graph.nodes : [];
+  const edges = Array.isArray(graph?.edges) ? graph.edges : [];
+  if (!nodes.length) return null;
+
+  const width = 640;
+  const height = 220;
+  const horizontalGap = nodes.length > 1 ? width / (nodes.length + 1) : width / 2;
+  const positionedNodes = nodes.map((node, index) => ({
+    ...node,
+    x: Math.round(horizontalGap * (index + 1)),
+    y: index % 2 === 0 ? 72 : 148
+  }));
+  const nodeMap = Object.fromEntries(positionedNodes.map((node) => [node.id, node]));
+
+  return (
+    <div className="mb-4 rounded-2xl border border-slate-200 bg-white px-3 py-4">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Knowledge Graph View</span>
+        <span className="text-[10px] text-slate-400">节点 {nodes.length} / 边 {edges.length}</span>
+      </div>
+      <div className="overflow-x-auto">
+        <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="min-w-[640px]">
+          <defs>
+            <marker id="reasoning-arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+              <path d="M0,0 L0,6 L9,3 z" fill="#94a3b8" />
+            </marker>
+          </defs>
+          {edges.map((edge, index) => {
+            const source = nodeMap[edge.source];
+            const target = nodeMap[edge.target];
+            if (!source || !target) return null;
+            const midX = (source.x + target.x) / 2;
+            const midY = (source.y + target.y) / 2 - 18;
+            return (
+              <g key={`${edge.source}-${edge.target}-${index}`}>
+                <line
+                  x1={source.x + 58}
+                  y1={source.y}
+                  x2={target.x - 58}
+                  y2={target.y}
+                  stroke="#94a3b8"
+                  strokeWidth="1.8"
+                  markerEnd="url(#reasoning-arrow)"
+                />
+                <rect x={midX - 28} y={midY - 10} width="56" height="20" rx="10" fill="#f8fafc" stroke="#e2e8f0" />
+                <text x={midX} y={midY + 4} textAnchor="middle" className="fill-slate-500 text-[10px] font-semibold">
+                  {edge.label}
+                </text>
+              </g>
+            );
+          })}
+          {positionedNodes.map((node) => {
+            const styleClass = REASONING_GRAPH_NODE_STYLES[node.node_type] || REASONING_GRAPH_NODE_STYLES.bridge;
+            const [fillClass, strokeClass, textClass] = styleClass.split(" ");
+            return (
+              <g key={node.id}>
+                <rect
+                  x={node.x - 54}
+                  y={node.y - 24}
+                  width="108"
+                  height="48"
+                  rx="16"
+                  className={`${fillClass} ${strokeClass}`}
+                  strokeWidth="1.2"
+                />
+                <text x={node.x} y={node.y - 4} textAnchor="middle" className="fill-slate-400 text-[9px] font-black uppercase tracking-[0.18em]">
+                  {String(node.node_type || "node")}
+                </text>
+                <text x={node.x} y={node.y + 14} textAnchor="middle" className={`${textClass} text-[11px] font-bold`}>
+                  {String(node.label || "")}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+    </div>
+  );
+};
+
 const StudentWorkspace = () => {
   const navigate = useNavigate();
   const [inputValue, setInputValue] = useState("");
@@ -411,7 +502,10 @@ const StudentWorkspace = () => {
       const res = await fetch(buildApiUrl(`/api/conversations/${id}/messages`));
       if (res.ok) {
         const msgs = await res.json();
-        setChatLog(Array.isArray(msgs) ? msgs : []);
+        setChatLog(Array.isArray(msgs) ? msgs.map(msg => ({
+          ...msg,
+          reasoning_graph: msg?.reasoning_graph || null
+        })) : []);
       }
     } catch (err) {
       console.error(err);
@@ -552,7 +646,8 @@ const StudentWorkspace = () => {
         role: 'coach',
         agent: data.agent,
         text: data.reply,
-        reasoning_trace: data.reasoning_trace || null
+        reasoning_trace: data.reasoning_trace || null,
+        reasoning_graph: data.reasoning_graph || null
       }]);
     } catch (e) {
       setChatLog(prev => [...prev, { role: 'coach', agent: '系统助手', text: '抱歉，导师暂时连不上线。' }]);
@@ -929,6 +1024,7 @@ const StudentWorkspace = () => {
                           )}
                           {shouldShowReasoning(m) && expandedReasoning[`coach-${i}`] && (
                             <div className="rounded-2xl bg-slate-50 border border-slate-200 px-4 py-3 text-[12px] leading-6 text-slate-500">
+                              <ReasoningGraphPanel graph={m.reasoning_graph} />
                               <ReactMarkdown>{m.reasoning_trace}</ReactMarkdown>
                             </div>
                           )}

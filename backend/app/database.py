@@ -1,5 +1,6 @@
-import sqlite3
+import json
 import os
+import sqlite3
 from datetime import datetime
 from typing import Optional
 
@@ -75,6 +76,7 @@ def init_db():
         agent TEXT,
         content TEXT NOT NULL,
         reasoning_trace TEXT,
+        reasoning_graph TEXT,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (conversation_id) REFERENCES conversations(id)
     )
@@ -232,6 +234,9 @@ def migrate_db():
     cursor.execute("PRAGMA table_info(messages)")
     if "reasoning_trace" not in [row[1] for row in cursor.fetchall()]:
         cursor.execute("ALTER TABLE messages ADD COLUMN reasoning_trace TEXT")
+    cursor.execute("PRAGMA table_info(messages)")
+    if "reasoning_graph" not in [row[1] for row in cursor.fetchall()]:
+        cursor.execute("ALTER TABLE messages ADD COLUMN reasoning_graph TEXT")
 
     conn.commit()
     conn.close()
@@ -319,10 +324,25 @@ def get_conversation_messages(conv_id: str):
     conn = get_db_connection()
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
-    cursor.execute("SELECT role, agent, content as text, reasoning_trace FROM messages WHERE conversation_id = ? ORDER BY timestamp ASC", (conv_id,))
+    cursor.execute(
+        "SELECT role, agent, content as text, reasoning_trace, reasoning_graph FROM messages WHERE conversation_id = ? ORDER BY timestamp ASC",
+        (conv_id,),
+    )
     rows = cursor.fetchall()
     conn.close()
-    return [dict(row) for row in rows]
+    messages = []
+    for row in rows:
+        item = dict(row)
+        raw_graph = item.get("reasoning_graph")
+        if raw_graph:
+            try:
+                item["reasoning_graph"] = json.loads(raw_graph)
+            except (TypeError, ValueError, json.JSONDecodeError):
+                item["reasoning_graph"] = None
+        else:
+            item["reasoning_graph"] = None
+        messages.append(item)
+    return messages
 
 def save_message(
     conv_id: str,
@@ -330,7 +350,8 @@ def save_message(
     content: str,
     agent: Optional[str] = None,
     user_id: Optional[str] = None,
-    reasoning_trace: Optional[str] = None
+    reasoning_trace: Optional[str] = None,
+    reasoning_graph: Optional[dict] = None,
 ):
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -347,8 +368,15 @@ def save_message(
                        (conv_id, user_id, title))
     
     cursor.execute(
-        "INSERT INTO messages (conversation_id, role, content, agent, reasoning_trace) VALUES (?, ?, ?, ?, ?)",
-        (conv_id, role, content, agent, reasoning_trace)
+        "INSERT INTO messages (conversation_id, role, content, agent, reasoning_trace, reasoning_graph) VALUES (?, ?, ?, ?, ?, ?)",
+        (
+            conv_id,
+            role,
+            content,
+            agent,
+            reasoning_trace,
+            json.dumps(reasoning_graph, ensure_ascii=False) if reasoning_graph else None,
+        )
     )
     conn.commit()
     conn.close()

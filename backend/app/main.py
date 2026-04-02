@@ -69,6 +69,7 @@ class ChatResponse(BaseModel):
     reply: str
     agent: str
     reasoning_trace: Optional[str] = None
+    reasoning_graph: Optional[dict] = None
 
 class CreateConvRequest(BaseModel):
     id: str
@@ -553,6 +554,7 @@ def chat_endpoint(request: ChatRequest):
     final_reply = messages[-1].content if messages else "抱歉，系统内部状态流转异常，未返回消息。"
     context = final_state.get("context", {}) or {}
     reasoning_trace = context.get("reasoning_trace")
+    reasoning_graph = context.get("reasoning_graph")
     
     agent_id = final_state.get("next_agent", "unknown")
     agent_map = {
@@ -570,12 +572,14 @@ def chat_endpoint(request: ChatRequest):
         "coach",
         str(final_reply),
         display_name,
-        reasoning_trace=str(reasoning_trace) if reasoning_trace else None
+        reasoning_trace=str(reasoning_trace) if reasoning_trace else None,
+        reasoning_graph=reasoning_graph if isinstance(reasoning_graph, dict) else None
     )
     return ChatResponse(
         reply=str(final_reply),
         agent=display_name,
-        reasoning_trace=str(reasoning_trace) if reasoning_trace else None
+        reasoning_trace=str(reasoning_trace) if reasoning_trace else None,
+        reasoning_graph=reasoning_graph if isinstance(reasoning_graph, dict) else None
     )
 
 @app.post("/api/projects")
