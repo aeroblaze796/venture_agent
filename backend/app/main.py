@@ -1,6 +1,6 @@
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Query
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 import pypdf
 import docx
@@ -10,8 +10,10 @@ import uuid
 import sqlite3
 import datetime
 import json
+import re
 from typing import Optional, List, Literal
 from pydantic import BaseModel, Field
+import httpx
 print(f"DEBUG: main.py loaded from {os.path.abspath(__file__)}")
 
 # 导入本地模块
@@ -36,6 +38,12 @@ from app.database import (
 )
 from langchain_core.messages import HumanMessage
 from app.agent.graph import app_graph
+from app.agent.reasoning_graph_store import (
+    build_reasoning_graph_query,
+    get_neo4j_connect_url,
+    get_neo4j_browser_origin,
+    store_reasoning_graph_in_neo4j,
+)
 from app.ingestion.db_config import db
 
 app = FastAPI(
@@ -68,8 +76,105 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     reply: str
     agent: str
+    message_id: Optional[int] = None
     reasoning_trace: Optional[str] = None
     reasoning_graph: Optional[dict] = None
+
+
+def _browser_proxy_base(request: Request) -> str:
+    return str(request.base_url).rstrip("/") + "/api/neo4j-browser"
+
+
+def _rewrite_browser_html(html: str, request: Request, message_id: int) -> str:
+    browser_base = _browser_proxy_base(request)
+    query = build_reasoning_graph_query(message_id)
+    connect_url = get_neo4j_connect_url()
+    bootstrap_config = f"""
+<script>
+window.__VA_BROWSER_BOOTSTRAP__ = {{
+  initCmd: {json.dumps(query)},
+  playImplicitInitCommands: true,
+  connectURL: {json.dumps(connect_url)},
+  db: "neo4j",
+  cmd: "edit",
+  arg: {json.dumps(query)}
+}};
+(function() {{
+  const current = new URL(window.location.href);
+  current.searchParams.set('cmd', 'edit');
+  current.searchParams.set('arg', {json.dumps(query)});
+  current.searchParams.set('db', 'neo4j');
+  current.searchParams.set('connectURL', {json.dumps(connect_url)});
+  window.history.replaceState(null, '', current.toString());
+  try {{
+    window.localStorage.setItem('neo4j.settings', JSON.stringify({{
+      maxHistory: 30,
+      theme: 'auto',
+      initCmd: {json.dumps(query)},
+      playImplicitInitCommands: true
+    }}));
+  }} catch (error) {{
+    console.warn('Failed to seed neo4j.settings', error);
+  }}
+}})();
+</script>
+"""
+    if "<head>" in html:
+        html = html.replace("<head>", f'<head><base href="{browser_base}/assets/">{bootstrap_config}', 1)
+    html = re.sub(
+        r'((?:href|src)=["\'])((?!https?:|data:|#|/api/neo4j-browser)([^"\']+))(["\'])',
+        lambda match: f"{match.group(1)}{browser_base}/assets/{match.group(3)}{match.group(4)}",
+        html,
+    )
+    return html
+
+
+async def _proxy_browser_request(
+    request: Request,
+    upstream_path: str,
+    *,
+    message_id: Optional[int] = None,
+) -> Response:
+    browser_origin = get_neo4j_browser_origin()
+    target_url = f"{browser_origin.rstrip('/')}/{upstream_path.lstrip('/')}"
+    if request.url.query:
+        target_url = f"{target_url}?{request.url.query}"
+
+    headers = {}
+    for key, value in request.headers.items():
+        lower_key = key.lower()
+        if lower_key in {"host", "content-length"}:
+            continue
+        headers[key] = value
+
+    async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
+        upstream_response = await client.request(
+            request.method,
+            target_url,
+            headers=headers,
+            content=await request.body(),
+        )
+
+    content = upstream_response.content
+    media_type = upstream_response.headers.get("content-type", "text/plain")
+    response_headers = {
+        key: value
+        for key, value in upstream_response.headers.items()
+        if key.lower() not in {"content-length", "content-security-policy", "x-frame-options"}
+    }
+    response_headers["Cache-Control"] = "no-store"
+
+    if "text/html" in media_type and message_id is not None:
+        html = content.decode(upstream_response.encoding or "utf-8", errors="replace")
+        html = _rewrite_browser_html(html, request, message_id)
+        return HTMLResponse(content=html, status_code=upstream_response.status_code, headers=response_headers)
+
+    return Response(
+        content=content,
+        status_code=upstream_response.status_code,
+        headers=response_headers,
+        media_type=media_type,
+    )
 
 class CreateConvRequest(BaseModel):
     id: str
@@ -408,6 +513,30 @@ def list_conversations(user_id: str):
 def list_messages(conv_id: str):
     return get_conversation_messages(conv_id)
 
+
+@app.get("/api/neo4j-browser/view/{message_id}")
+async def neo4j_browser_view(message_id: int, request: Request):
+    return await _proxy_browser_request(request, "/browser/", message_id=message_id)
+
+
+@app.api_route("/api/neo4j-browser/assets/{asset_path:path}", methods=["GET", "HEAD"])
+async def neo4j_browser_assets(asset_path: str, request: Request):
+    return await _proxy_browser_request(request, f"/browser/{asset_path}")
+
+
+@app.api_route("/api/neo4j-browser/{asset_name}", methods=["GET", "HEAD"])
+async def neo4j_browser_asset_fallback(asset_name: str, request: Request):
+    if "/" in asset_name:
+        raise HTTPException(status_code=404, detail="Not found")
+    if not re.search(r"\.(js|css|json|png|jpg|jpeg|svg|ico|map|woff2?|ttf)$", asset_name, re.IGNORECASE):
+        raise HTTPException(status_code=404, detail="Not found")
+    return await _proxy_browser_request(request, f"/browser/{asset_name}")
+
+
+@app.api_route("/api/neo4j-browser/db/{db_path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"])
+async def neo4j_browser_db_proxy(db_path: str, request: Request):
+    return await _proxy_browser_request(request, f"/db/{db_path}")
+
 @app.post("/api/conversations")
 def create_conv(request: CreateConvRequest):
     create_conversation(request.id, request.user_id, request.title, request.greeting)
@@ -567,7 +696,7 @@ def chat_endpoint(request: ChatRequest):
     if isinstance(final_reply, list):
         final_reply = "".join(str(part) for part in final_reply)
         
-    save_message(
+    coach_message_id = save_message(
         session_id,
         "coach",
         str(final_reply),
@@ -575,9 +704,21 @@ def chat_endpoint(request: ChatRequest):
         reasoning_trace=str(reasoning_trace) if reasoning_trace else None,
         reasoning_graph=reasoning_graph if isinstance(reasoning_graph, dict) else None
     )
+    if coach_message_id and isinstance(reasoning_graph, dict):
+        try:
+            store_reasoning_graph_in_neo4j(
+                message_id=int(coach_message_id),
+                conversation_id=session_id,
+                agent=display_name,
+                reasoning_graph=reasoning_graph,
+            )
+        except Exception as exc:
+            print(f"Failed to sync reasoning_graph to Neo4j: {exc}")
+
     return ChatResponse(
         reply=str(final_reply),
         agent=display_name,
+        message_id=int(coach_message_id) if coach_message_id else None,
         reasoning_trace=str(reasoning_trace) if reasoning_trace else None,
         reasoning_graph=reasoning_graph if isinstance(reasoning_graph, dict) else None
     )

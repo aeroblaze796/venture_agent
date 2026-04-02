@@ -325,7 +325,7 @@ def get_conversation_messages(conv_id: str):
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT role, agent, content as text, reasoning_trace, reasoning_graph FROM messages WHERE conversation_id = ? ORDER BY timestamp ASC",
+        "SELECT id, role, agent, content as text, reasoning_trace, reasoning_graph FROM messages WHERE conversation_id = ? ORDER BY timestamp ASC",
         (conv_id,),
     )
     rows = cursor.fetchall()
@@ -378,9 +378,24 @@ def save_message(
             json.dumps(reasoning_graph, ensure_ascii=False) if reasoning_graph else None,
         )
     )
+    message_id = cursor.lastrowid
     conn.commit()
     conn.close()
-    return True
+    return message_id
+
+
+def update_message_reasoning_graph(message_id: int, reasoning_graph: Optional[dict]):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE messages SET reasoning_graph = ? WHERE id = ?",
+        (
+            json.dumps(reasoning_graph, ensure_ascii=False) if reasoning_graph else None,
+            message_id,
+        ),
+    )
+    conn.commit()
+    conn.close()
 
 def create_conversation(conv_id: str, user_id: str, title: str, greeting: str):
     conn = get_db_connection()
