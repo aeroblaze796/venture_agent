@@ -898,7 +898,7 @@ async def get_project_file_content(project_id: int, file_id: int):
     stored_content = (row["content"] or "").strip()
     if stored_content:
         conn.close()
-        return {"id": file_id, "filename": row["filename"], "content": row["content"]}
+        return {"id": file_id, "filename": row["filename"], "file_url": row["file_url"], "content": row["content"]}
     
     file_url = row["file_url"]
     filename = row["filename"]
@@ -906,25 +906,38 @@ async def get_project_file_content(project_id: int, file_id: int):
     try:
         filename_part = file_url.split("/api/uploads/")[-1]
         physical_path = os.path.join(UPLOAD_DIR, filename_part)
-        if filename.endswith(".pdf"):
+        if not os.path.exists(physical_path):
+            raise FileNotFoundError(f"源文件不存在: {physical_path}")
+
+        normalized_filename = filename.lower()
+        if normalized_filename.endswith(".pdf"):
             with open(physical_path, "rb") as f:
                 pdf_reader = pypdf.PdfReader(f)
                 for page in pdf_reader.pages:
                     text = page.extract_text()
-                    if text: content += text + "\n"
-        elif filename.endswith(".docx"):
+                    if text:
+                        content += text + "\n"
+        elif normalized_filename.endswith(".docx"):
             doc = docx.Document(physical_path)
-            for para in doc.paragraphs: content += para.text + "\n"
+            for para in doc.paragraphs:
+                content += para.text + "\n"
         else:
             content = "Non-previewable file type."
-    except Exception as e:
-        content = f"Error reading file: {str(e)}"
-    else:
+
+        # 过滤非法 surrogate 字符，避免 JSON 序列化时连接被中断
+        content = re.sub(r'[\ud800-\udfff]', '', content)
+
         # 为历史文件做惰性回填，后续审计与预览统一走数据库中的 content
-        cursor.execute("UPDATE project_files SET content = ? WHERE id = ? AND project_id = ?", (content, file_id, project_id))
+        cursor.execute(
+            "UPDATE project_files SET content = ? WHERE id = ? AND project_id = ?",
+            (content, file_id, project_id)
+        )
         conn.commit()
-    conn.close()
-    return {"id": file_id, "filename": filename, "content": content}
+        conn.close()
+        return {"id": file_id, "filename": filename, "file_url": file_url, "content": content}
+    except Exception as e:
+        conn.close()
+        raise HTTPException(status_code=500, detail=f"读取文件内容失败: {str(e)}")
 
 @app.delete("/api/project-files/{file_id}")
 def delete_project_file(file_id: int):

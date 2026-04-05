@@ -370,10 +370,6 @@ const StudentWorkspace = () => {
     });
     setCurrentStep(0);
     setFormError("");
-    setEditorContent("");
-    setActiveFileId(null);
-    setActiveFileUrl(null);
-    setProjectFiles([]);
     setShowNewProjectModal(true);
   };
 
@@ -395,9 +391,11 @@ const StudentWorkspace = () => {
         const candidateProjectId = activeProjectId || (Number.isFinite(storedProjectId) ? storedProjectId : null);
         if (candidateProjectId && (data.projects || []).some(p => p.id === candidateProjectId)) {
           if (activeProjectId !== candidateProjectId) setActiveProjectId(candidateProjectId);
-          await fetchProjectFiles(candidateProjectId, { autoSelectLatest: true });
+          const files = await fetchProjectFiles(candidateProjectId, { autoSelectLatest: true });
           const curProj = (data.projects || []).find(p => p.id === candidateProjectId);
-          if (curProj && !activeFileId && !(projectFiles || []).length) setEditorContent(curProj.content || "");
+          if (curProj && (!Array.isArray(files) || files.length === 0)) {
+            setEditorContent(curProj.content || "");
+          }
         } else if (!activeProjectId && (data.projects || []).length > 0) {
           const firstProjectId = data.projects[0].id;
           setActiveProjectId(firstProjectId);
@@ -471,16 +469,19 @@ const StudentWorkspace = () => {
       const proj = (syncData.projects || []).find(p => p.id === activeProjectId);
 
       if (isProjectChanged) {
-        // 仅在切换项目时重置
-        setEditorContent(proj?.content || "");
+        // 仅在切换项目时重置，并以接口返回的文件列表为准恢复正文
         setActiveFileId(null);
         setActiveFileUrl(null);
         setProjectFiles([]);
-        fetchProjectFiles(activeProjectId, { autoSelectLatest: true });
+        fetchProjectFiles(activeProjectId, { autoSelectLatest: true }).then((files) => {
+          if (Array.isArray(files) && files.length === 0) {
+            setEditorContent(proj?.content || "");
+          }
+        });
         prevProjectIdRef.current = activeProjectId;
       } else if (!activeFileId) {
         // 同一项目内刷新，且未在预览文件时，更新编辑器内容
-        if (proj) setEditorContent(proj.content || "");
+        if (proj && projectFiles.length === 0) setEditorContent(proj.content || "");
       }
     } else {
       localStorage.removeItem("va_active_project_id");
@@ -500,15 +501,6 @@ const StudentWorkspace = () => {
     }
     return () => clearInterval(interval);
   }, [isPitching, pitchTime]);
-
-  // --- 自动保存逻辑 ---
-  useEffect(() => {
-    if (!activeProjectId) return; // 允许在内容被清空时同步到后端
-    const timer = setTimeout(() => {
-      saveContent(editorContent);
-    }, 2000); // 2秒防抖
-    return () => clearTimeout(timer);
-  }, [editorContent, activeProjectId]);
 
   const fetchProjectFiles = async (id, options = {}) => {
     try {
@@ -537,13 +529,17 @@ const StudentWorkspace = () => {
     } else {
       try {
         const res = await fetch(buildApiUrl(`/api/projects/${targetProjectId}/files/${fileId}`));
-        if (res.ok) {
-          const data = await res.json();
-          setEditorContent(data.content);
-          setActiveFileId(fileId);
-          if (!options.skipFileUrlUpdate) setActiveFileUrl(data.file_url || null);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.detail || data.error || "获取文件内容失败");
         }
-      } catch (e) { message.error("获取文件内容失败"); }
+        setEditorContent(data.content || "");
+        setActiveFileId(fileId);
+        if (!options.skipFileUrlUpdate) setActiveFileUrl(data.file_url || null);
+      } catch (e) {
+        console.error("Get file content failed:", e);
+        message.error(e?.message || "获取文件内容失败");
+      }
     }
   };
 
@@ -771,8 +767,12 @@ const StudentWorkspace = () => {
 
   const handleKeyDown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } };
 
-  const saveContent = async (content) => {
-    if (!activeProjectId) return;
+  const saveContent = async (content, options = {}) => {
+    const { showSuccess = false } = options;
+    if (!activeProjectId) {
+      if (showSuccess) message.warning("当前没有可保存的项目");
+      return;
+    }
     setIsSaving(true);
     try {
       const res = await fetch(buildApiUrl(`/api/projects/${activeProjectId}/content`), {
@@ -783,9 +783,13 @@ const StudentWorkspace = () => {
         setSyncData(prev => ({
           ...prev, projects: (prev.projects || []).map(p => p.id === activeProjectId ? { ...p, content } : p)
         }));
+        if (showSuccess) message.success("保存成功");
+      } else if (showSuccess) {
+        message.error("保存失败");
       }
     } catch (e) {
       console.error("Save content failed:", e);
+      if (showSuccess) message.error("保存失败");
     } finally { setIsSaving(false); }
   };
 
@@ -864,9 +868,10 @@ const StudentWorkspace = () => {
 
     setIsSaving(true);
     try {
+      const contentForNewProject = activeProjectId ? "" : editorContent;
       const resp = await fetch(buildApiUrl('/api/projects'), {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...projectForm, content: editorContent, owner_id: localStorage.getItem('va_username') })
+        body: JSON.stringify({ ...projectForm, content: contentForNewProject, owner_id: localStorage.getItem('va_username') })
       });
       if (resp.ok) {
         const result = await resp.json();
@@ -1216,7 +1221,7 @@ const StudentWorkspace = () => {
                 <div className="flex flex-col"><h2 className="text-[14px] font-black text-indigo-500 uppercase tracking-[0.2em] m-0">Venture Editor</h2><span className="text-[9px] text-slate-300 font-bold uppercase">{activeProjectId ? 'Project Editing' : 'Draft Preparation'}</span></div>
                 <div className="flex gap-3">
                   <Button
-                    onClick={() => saveContent(editorContent)}
+                    onClick={() => saveContent(editorContent, { showSuccess: true })}
                     loading={isSaving}
                     type="primary"
                     shape="round"
