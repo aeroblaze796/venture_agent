@@ -1405,6 +1405,68 @@ async def generate_capability_profile(project_id: int):
         print(f"Failed to generate capability profile: {e}")
         return {"error": f"由于系统或网络异常，生成画像评估失败 ({str(e)})"}
 
+class FinancialAnalysisRequest(BaseModel):
+    users: float
+    cac: float
+    arpu: float
+    fixedCost: float
+    netProfit: float
+
+@app.post("/api/projects/{project_id}/financial-analysis")
+async def project_financial_analysis(project_id: int, request: FinancialAnalysisRequest):
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("SELECT content FROM projects WHERE id = ?", (project_id,))
+    proj = cursor.fetchone()
+    conn.close()
+    
+    project_text = proj["content"] if proj and proj["content"] else "当前项目无核心文档。请要求学生尽快在画布中撰写商业计划。"
+    
+    try:
+        from app.agent.graph import get_llm
+        llm = get_llm()
+        
+        prompt = f"""你现在扮演著名风险投资机构的 AI 高级尽调合伙人 (DeepSeek Financial Pro)。
+你正在对一个早期的硬科技或高校双创项目进行残酷的极端压力测试（Financial Due Diligence）。
+
+【项目原始上下文参考】：
+{project_text[:2000]}
+
+【创始人提交的当月预测动态财报模型】：
+- 初始用户基数: {request.users}人/月
+- 综合获客成本 (CAC): {request.cac}元/人
+- 单客月度营收 (ARPU): {request.arpu}元
+- 硬性固定成本: {request.fixedCost}元/月
+- 静态净利润预估: {request.netProfit}元/月
+
+你需要基于以上事实极其残酷地评估。如果净利极其丰厚但商业逻辑薄弱，直接以投资人的身份无情拆穿。
+如果参数显示严重亏损，请指出具体止损建议。
+
+请严格返回如下单一纯净的 JSON 格式（不要包含 markdown 代码块标志，只输出大括号里的内容）：
+{{
+    "risk_assessment": "【危机断言】(不少于60字。指出当期 CAC 与固定成本对现金流的隐蔽消耗)",
+    "growth_leverage": "【杠杆测算】(判断 LTV / CAC。指出模型能否长效维持或规模效应的拐点在哪)",
+    "next_metric_focus": "【靶向核心】(明确指出创始人下个月必须关注或优化的 1 个关键运营指标编号)"
+}}
+"""
+        response = llm.invoke(prompt)
+        raw_text = response.content
+        if isinstance(raw_text, list):
+            raw_text = "".join(str(part) for part in raw_text)
+        raw_text = raw_text.strip()
+        if "```json" in raw_text:
+            raw_text = raw_text.split("```json")[1].split("```")[0].strip()
+        elif raw_text.startswith("```"):
+            raw_text = raw_text.strip("```").strip()
+            
+        import json
+        result = json.loads(raw_text)
+        return {"status": "success", "advice": result}
+    except Exception as e:
+        print(f"金融尽调生成失败: {e}")
+        return {"status": "error", "message": f"金融沙盘模型崩溃 ({str(e)})"}
+
 # --- Admin Endpoints ---
 
 @app.get("/api/admin/dashboard")

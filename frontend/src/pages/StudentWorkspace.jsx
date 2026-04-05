@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import dayjs from "dayjs";
 import ReactMarkdown from "react-markdown";
-import { Calendar, Timeline, Badge, Tooltip, Avatar, ConfigProvider, Modal, Button, Select, List, Steps, message, Input, Space, Divider, Empty, Popconfirm, Popover, Progress } from "antd";
+import { Calendar, Timeline, Badge, Tooltip, Avatar, ConfigProvider, Modal, Button, Select, List, Steps, message, Input, Space, Divider, Empty, Popconfirm, Popover, Progress, Spin } from "antd";
 import {
   RocketOutlined,
   FileTextOutlined,
@@ -40,7 +40,9 @@ import {
   FileSearchOutlined,
   SyncOutlined,
   DownOutlined,
-  UpOutlined
+  UpOutlined,
+  ShareAltOutlined,
+  InfoCircleOutlined
 } from "@ant-design/icons";
 import "./VentureDashboard.css";
 import UserProfileModal from "../components/UserProfileModal";
@@ -63,10 +65,10 @@ const RadarChart = ({ data = [], size = 180 }) => {
   const hasValues = safeData.some((item) => typeof item.value === "number");
   const points = hasValues
     ? safeData.map((d, i) => {
-        const angle = (Math.PI * 2 * i) / safeData.length - Math.PI / 2;
-        const r = ((d.value ?? 0) / 100) * (size / 2);
-        return `${size / 2 + r * Math.cos(angle)},${size / 2 + r * Math.sin(angle)}`;
-      }).join(" ")
+      const angle = (Math.PI * 2 * i) / safeData.length - Math.PI / 2;
+      const r = ((d.value ?? 0) / 100) * (size / 2);
+      return `${size / 2 + r * Math.cos(angle)},${size / 2 + r * Math.sin(angle)}`;
+    }).join(" ")
     : "";
 
   const gridLevels = [0.2, 0.4, 0.6, 0.8, 1];
@@ -109,33 +111,89 @@ const RadarChart = ({ data = [], size = 180 }) => {
 
 const Neo4jReasoningGraphPanel = ({ messageId, graph }) => {
   const nodes = Array.isArray(graph?.nodes) ? graph.nodes : [];
+  const edges = Array.isArray(graph?.edges) ? graph.edges : [];
   if (!messageId || !nodes.length) return null;
-  const cypher = [
-    `MATCH (n:ReasoningNode {message_id: ${Number(messageId)}})`,
-    `OPTIONAL MATCH (n)-[r:REASONING_EDGE {message_id: ${Number(messageId)}}]->(m:ReasoningNode {message_id: ${Number(messageId)}})`,
-    "RETURN n, r, m"
-  ].join("\n");
-  const iframeUrl = new URL(buildApiUrl(`/api/neo4j-browser/view/${messageId}`));
-  iframeUrl.searchParams.set("cmd", "edit");
-  iframeUrl.searchParams.set("arg", cypher);
-  iframeUrl.searchParams.set("db", "neo4j");
-  iframeUrl.searchParams.set("connectURL", "bolt://localhost:7687");
+
+  const width = 500;
+  const height = 300;
+  const radius = 100;
+  const cx = width / 2;
+  const cy = height / 2;
+
+  // 使用圆形布局将节点分布在四周
+  const nodeMap = {};
+  nodes.forEach((n, i) => {
+    const key = n.id || n.node_id;
+    const angle = (Math.PI * 2 * i) / nodes.length - Math.PI / 2;
+    nodeMap[key] = {
+      ...n,
+      key,
+      x: cx + radius * Math.cos(angle),
+      y: cy + radius * Math.sin(angle)
+    };
+  });
 
   return (
-    <div className="mb-4 rounded-2xl border border-slate-200 bg-white px-3 py-4">
+    <div className="mb-4 rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm hover:shadow-md transition-shadow">
       <div className="mb-3 flex items-center justify-between">
-        <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Knowledge Graph View</span>
-        <span className="text-[10px] text-slate-400">Neo4j Browser Projection</span>
+        <div className="flex items-center gap-2">
+          <ShareAltOutlined className="text-blue-500" />
+          <span className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-500">
+            GraphRAG Reasoning Topology
+          </span>
+        </div>
+        <Badge status="processing" text={<span className="text-[10px] text-slate-400">Live Render</span>} />
       </div>
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
-        <iframe
-          title={`reasoning-graph-${messageId}`}
-          src={iframeUrl.toString()}
-          className="h-[420px] w-full bg-white"
-        />
+
+      <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-center p-2">
+        <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} className="font-sans">
+          <defs>
+            <marker id="arrowhead" markerWidth="6" markerHeight="4" refX="28" refY="2" orient="auto">
+              <polygon points="0 0, 6 2, 0 4" fill="#94a3b8" />
+            </marker>
+          </defs>
+          {/* Edges */}
+          {edges.map((e, idx) => {
+            const s = nodeMap[e.source];
+            const t = nodeMap[e.target];
+            if (!s || !t) return null;
+            return (
+              <g key={`edge-${idx}`}>
+                <line x1={s.x} y1={s.y} x2={t.x} y2={t.y} stroke="#cbd5e1" strokeWidth="1.5" markerEnd="url(#arrowhead)" />
+                <rect x={(s.x + t.x) / 2 - 20} y={(s.y + t.y) / 2 - 8} width="40" height="16" fill="rgba(255,255,255,0.8)" rx="4" />
+                <text x={(s.x + t.x) / 2} y={(s.y + t.y) / 2 + 3} textAnchor="middle" fontSize="9" fill="#64748b" className="font-semibold">
+                  {e.label || ""}
+                </text>
+              </g>
+            );
+          })}
+          {/* Nodes */}
+          {nodes.map(n => {
+            const key = n.id || n.node_id;
+            const node = nodeMap[key];
+            if (!node) return null;
+            const isEntity = n.node_type !== "concept" && n.node_type !== "mechanism";
+            const textLabel = node.label || node.name || "Node";
+            const nodeTypeAbbr = (n.node_type || "NODE").substring(0, 4).toUpperCase();
+
+            return (
+              <g key={key} transform={`translate(${node.x},${node.y})`} className="cursor-pointer group">
+                <circle r="22" fill={isEntity ? "#3b82f6" : "#6366f1"} className="group-hover:opacity-80 drop-shadow-md transition-all" />
+                <circle r="18" fill="white" fillOpacity="0.15" />
+                <rect x="-40" y="-38" width="80" height="14" fill="rgba(255,255,255,0.9)" rx="4" className="shadow-sm" />
+                <text y="-28" textAnchor="middle" fontSize="11" fill="#334155" className="font-bold drop-shadow-sm">
+                  {textLabel.length > 8 ? textLabel.substring(0, 8) + ".." : textLabel}
+                </text>
+                <text y="3" textAnchor="middle" fontSize="10" fill="white" className="font-black">
+                  {nodeTypeAbbr}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
       </div>
-      <p className="mt-2 text-[10px] leading-5 text-slate-400">
-        若首次显示 Neo4j 登录界面，只需在该窗口连接一次数据库，之后会自动按当前消息过滤显示图谱。
+      <p className="mt-3 text-[11px] leading-5 text-slate-400 flex items-center gap-1">
+        <InfoCircleOutlined /> 系统已调用 Neo4j 图数据库，在底层检索到上述微观时空拓扑关联链。
       </p>
     </div>
   );
@@ -176,6 +234,10 @@ const StudentWorkspace = () => {
   const [reviewResult, setReviewResult] = useState("");
   const [reviewLoading, setReviewLoading] = useState(false);
 
+  const [isFinancialAnalyzing, setIsFinancialAnalyzing] = useState(false);
+  const [financialAdvice, setFinancialAdvice] = useState(null);
+  const [showFinancialResultModal, setShowFinancialResultModal] = useState(false);
+
   const handleLogout = () => {
     localStorage.clear();
     navigate('/');
@@ -193,7 +255,7 @@ const StudentWorkspace = () => {
     && !!message?.reasoning_trace
     && (message?.agent === '项目教练 Agent (A2)' || message?.agent === '学习辅导 Agent (A1)')
   );
-  
+
   // Custom modals state
   const [showRubricModal, setShowRubricModal] = useState(false);
   const [selectedRubric, setSelectedRubric] = useState("互联网+");
@@ -204,7 +266,7 @@ const StudentWorkspace = () => {
   const isReviewing = reviewLoading;
   const activeReview = reviewResult;
   const [newLogContent, setNewLogContent] = useState("");
-  
+
   const [financeData, setFinanceData] = useState({ users: 1000, cac: 50, arpu: 200, fixedCost: 50000 });
   const [pitchTime, setPitchTime] = useState(300);
   const [isPitching, setIsPitching] = useState(false);
@@ -335,7 +397,7 @@ const StudentWorkspace = () => {
       localStorage.setItem("va_active_project_id", String(activeProjectId));
       const isProjectChanged = prevProjectIdRef.current !== activeProjectId;
       const proj = (syncData.projects || []).find(p => p.id === activeProjectId);
-      
+
       if (isProjectChanged) {
         // 仅在切换项目时重置
         setEditorContent(proj?.content || "");
@@ -527,11 +589,45 @@ const StudentWorkspace = () => {
     }
   };
 
+  const handleFinancialAnalysis = async () => {
+    if (!activeProjectId) {
+      message.error("未绑定活跃项目，大模型无法读取上下文依据！");
+      return;
+    }
+    setIsFinancialAnalyzing(true);
+    setFinancialAdvice(null);
+    try {
+      const res = await fetch(buildApiUrl(`/api/projects/${activeProjectId}/financial-analysis`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          users: financeData.users,
+          cac: financeData.cac,
+          arpu: financeData.arpu,
+          fixedCost: financeData.fixedCost,
+          netProfit: (financeData.users * financeData.arpu) - (financeData.fixedCost + financeData.users * financeData.cac)
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.status === 'error') {
+        throw new Error(data.message || "DeepSeek 尽调服务暂时不可用");
+      }
+      setFinancialAdvice(data.advice);
+      message.success("Financial Agent 结构化尽调完毕！");
+      setShowFinancialResultModal(true);
+    } catch (err) {
+      console.error(err);
+      message.error("模型连线异常：" + err.message);
+    } finally {
+      setIsFinancialAnalyzing(false);
+    }
+  };
+
   const handleDeleteFile = async (fileId, fileUrl) => {
     try {
       await fetch(buildApiUrl(`/api/project-files/${fileId}`), { method: 'DELETE' });
       const wasActive = activeFileId === fileId;
-      
+
       // 1. 立即获取最新的文件列表并更新状态
       let newFiles = [];
       if (activeProjectId) {
@@ -673,7 +769,7 @@ const StudentWorkspace = () => {
       if (projectForm.members.length === 0) return "至少需要添加一名成员";
       let hasLeader = projectForm.members.some(m => m.role === 'Leader' || m.role === '组长');
       if (!hasLeader) return "本项目尚未指派负责人（组长），请在身份中选择'队长'或'组长'";
-      
+
       for (let m of projectForm.members) {
         if (!m.name.trim()) return "团队成员姓名不能为空";
         if (!isValidStr(m.name)) return `成员姓名 [${m.name}] 无效`;
@@ -799,7 +895,7 @@ const StudentWorkspace = () => {
     setShowReviewModal(true);
     try {
       const rubricValue = selectedRubric === "互联网+" ? "internet_plus" : "challenge_cup";
-      const res = await fetch(buildApiUrl(`/api/projects/${activeProjectId}/review`), { 
+      const res = await fetch(buildApiUrl(`/api/projects/${activeProjectId}/review`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rubric: rubricValue })
@@ -915,12 +1011,12 @@ const StudentWorkspace = () => {
 
           {/* 退出按钮 - 与管理员端 UI 对齐 */}
           <div className="p-4 border-t border-slate-100 m-4 text-center mt-auto">
-             <div 
-                onClick={handleLogout}
-                className="w-full py-3 rounded-2xl text-slate-400 hover:text-rose-500 hover:bg-slate-50 cursor-pointer transition-all flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest"
-             >
-                <LogoutOutlined /> 安全退出系统
-             </div>
+            <div
+              onClick={handleLogout}
+              className="w-full py-3 rounded-2xl text-slate-400 hover:text-rose-500 hover:bg-slate-50 cursor-pointer transition-all flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest"
+            >
+              <LogoutOutlined /> 安全退出系统
+            </div>
           </div>
         </aside>
 
@@ -929,9 +1025,9 @@ const StudentWorkspace = () => {
           <header className="h-16 border-b border-[#f1f3f5] px-8 flex items-center justify-between bg-white/80 backdrop-blur-md z-10 shrink-0">
             <div className="flex flex-col"><span className="text-[10px] font-black text-blue-500 tracking-widest uppercase">{activePage === 'chat' ? 'Venture Agent AI' : 'Venture Dashboard'}</span><span className="text-xs font-bold text-slate-400">{activePage === 'chat' ? '灵感辅导中' : '项目管控中'}</span></div>
             <div className="flex gap-4 items-center">
-              <Button 
-                type="text" 
-                icon={<SyncOutlined className={loading ? 'animate-spin' : ''} />} 
+              <Button
+                type="text"
+                icon={<SyncOutlined className={loading ? 'animate-spin' : ''} />}
                 onClick={async () => {
                   await fetchDashboardData();
                   await fetchNotifications();
@@ -950,72 +1046,72 @@ const StudentWorkspace = () => {
 
           {activePage === 'chat' ? (
             hasActiveConversation ? (
-            <>
-              <div className="flex-1 overflow-y-auto px-8 py-10 custom-scrollbar">
-                <div className="max-w-3xl mx-auto space-y-10">
-                  {chatLog.map((m, i) => (
-                    <div key={i} className={`flex w-full ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`flex items-start gap-4 max-w-[90%] ${m.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-                        <Avatar size={40} className="shadow-sm shrink-0 flex-none" style={{ backgroundColor: m.role === 'coach' ? '#2563eb' : '#f4f4f5' }} icon={m.role === 'coach' ? <RocketOutlined /> : <UserOutlined />} />
-                        <div className="flex flex-col gap-1">
-                          {m.role === 'coach' && <span className="text-[10px] font-black text-blue-500 px-2 bg-blue-50 rounded-lg">{m.agent}</span>}
-                          {shouldShowReasoning(m) && (
-                            <button
-                              type="button"
-                              onClick={() => toggleReasoning(`coach-${i}`)}
-                              className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-slate-500 transition-colors px-1 py-0.5 text-left"
-                            >
-                              <span>展示图谱检索与推理过程</span>
-                              {expandedReasoning[`coach-${i}`] ? <UpOutlined className="text-[10px]" /> : <DownOutlined className="text-[10px]" />}
-                            </button>
-                          )}
-                          {shouldShowReasoning(m) && expandedReasoning[`coach-${i}`] && (
-                            <div className="rounded-2xl bg-slate-50 border border-slate-200 px-4 py-3 text-[12px] leading-6 text-slate-500">
-                              <Neo4jReasoningGraphPanel messageId={m.message_id || m.id} graph={m.reasoning_graph} />
-                              <ReactMarkdown>{m.reasoning_trace}</ReactMarkdown>
+              <>
+                <div className="flex-1 overflow-y-auto px-8 py-10 custom-scrollbar">
+                  <div className="max-w-3xl mx-auto space-y-10">
+                    {chatLog.map((m, i) => (
+                      <div key={i} className={`flex w-full ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`flex items-start gap-4 max-w-[90%] ${m.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+                          <Avatar size={40} className="shadow-sm shrink-0 flex-none" style={{ backgroundColor: m.role === 'coach' ? '#2563eb' : '#f4f4f5' }} icon={m.role === 'coach' ? <RocketOutlined /> : <UserOutlined />} />
+                          <div className="flex flex-col gap-1">
+                            {m.role === 'coach' && <span className="text-[10px] font-black text-blue-500 px-2 bg-blue-50 rounded-lg">{m.agent}</span>}
+                            {shouldShowReasoning(m) && (
+                              <button
+                                type="button"
+                                onClick={() => toggleReasoning(`coach-${i}`)}
+                                className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-slate-500 transition-colors px-1 py-0.5 text-left"
+                              >
+                                <span>展示图谱检索与推理过程</span>
+                                {expandedReasoning[`coach-${i}`] ? <UpOutlined className="text-[10px]" /> : <DownOutlined className="text-[10px]" />}
+                              </button>
+                            )}
+                            {shouldShowReasoning(m) && expandedReasoning[`coach-${i}`] && (
+                              <div className="rounded-2xl bg-slate-50 border border-slate-200 px-4 py-3 text-[12px] leading-6 text-slate-500">
+                                <Neo4jReasoningGraphPanel messageId={m.message_id || m.id} graph={m.reasoning_graph} />
+                                <ReactMarkdown>{m.reasoning_trace}</ReactMarkdown>
+                              </div>
+                            )}
+                            <div className={`message-bubble ${m.role === 'user' ? 'user-bubble' : 'bot-bubble'}`}>
+                              {m.role === 'coach' ? <ReactMarkdown>{m.text}</ReactMarkdown> : <p className="m-0 font-medium">{m.text}</p>}
                             </div>
-                          )}
-                          <div className={`message-bubble ${m.role === 'user' ? 'user-bubble' : 'bot-bubble'}`}>
-                            {m.role === 'coach' ? <ReactMarkdown>{m.text}</ReactMarkdown> : <p className="m-0 font-medium">{m.text}</p>}
                           </div>
                         </div>
                       </div>
+                    ))}
+                    {isSending && <div className="text-[10px] text-slate-400 animate-pulse ml-12">导师正在深度解析中...</div>}
+                    <div ref={messagesEndRef} />
+                  </div>
+                </div>
+                <div className="p-8 h-[140px] flex items-center">
+                  <div className="max-w-3xl mx-auto w-full relative">
+                    <div className="mb-3 flex items-center gap-2 px-2">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">提问对象</span>
+                      <Button
+                        size="small"
+                        shape="round"
+                        type={selectedAgent === 'project_coach' ? 'primary' : 'default'}
+                        onClick={() => setSelectedAgent('project_coach')}
+                        className={selectedAgent === 'project_coach' ? 'bg-blue-600 border-none font-black' : 'font-black border-slate-200 text-slate-500'}
+                      >
+                        项目教练 Agent
+                      </Button>
+                      <Button
+                        size="small"
+                        shape="round"
+                        type={selectedAgent === 'learning_tutor' ? 'primary' : 'default'}
+                        onClick={() => setSelectedAgent('learning_tutor')}
+                        className={selectedAgent === 'learning_tutor' ? 'bg-emerald-600 border-none font-black' : 'font-black border-slate-200 text-slate-500'}
+                      >
+                        学习辅导 Agent
+                      </Button>
                     </div>
-                  ))}
-                  {isSending && <div className="text-[10px] text-slate-400 animate-pulse ml-12">导师正在深度解析中...</div>}
-                  <div ref={messagesEndRef} />
-                </div>
-              </div>
-              <div className="p-8 h-[140px] flex items-center">
-                <div className="max-w-3xl mx-auto w-full relative">
-                  <div className="mb-3 flex items-center gap-2 px-2">
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">提问对象</span>
-                    <Button
-                      size="small"
-                      shape="round"
-                      type={selectedAgent === 'project_coach' ? 'primary' : 'default'}
-                      onClick={() => setSelectedAgent('project_coach')}
-                      className={selectedAgent === 'project_coach' ? 'bg-blue-600 border-none font-black' : 'font-black border-slate-200 text-slate-500'}
-                    >
-                      项目教练 Agent
-                    </Button>
-                    <Button
-                      size="small"
-                      shape="round"
-                      type={selectedAgent === 'learning_tutor' ? 'primary' : 'default'}
-                      onClick={() => setSelectedAgent('learning_tutor')}
-                      className={selectedAgent === 'learning_tutor' ? 'bg-emerald-600 border-none font-black' : 'font-black border-slate-200 text-slate-500'}
-                    >
-                      学习辅导 Agent
-                    </Button>
-                  </div>
-                  <div className="bg-gray-50 border border-gray-100 rounded-3xl overflow-hidden focus-within:shadow-xl transition-all">
-                    <textarea value={inputValue} onChange={e => setInputValue(e.target.value)} onKeyDown={handleKeyDown} className="w-full bg-transparent border-none p-5 outline-none resize-none text-sm" placeholder="输入想法..." rows={1} />
-                    <div className="absolute right-4 bottom-4"><Button onClick={handleSend} disabled={isSending || !inputValue.trim()} type="primary" shape="circle" icon={<SendOutlined />} /></div>
+                    <div className="bg-gray-50 border border-gray-100 rounded-3xl overflow-hidden focus-within:shadow-xl transition-all">
+                      <textarea value={inputValue} onChange={e => setInputValue(e.target.value)} onKeyDown={handleKeyDown} className="w-full bg-transparent border-none p-5 outline-none resize-none text-sm" placeholder="输入想法..." rows={1} />
+                      <div className="absolute right-4 bottom-4"><Button onClick={handleSend} disabled={isSending || !inputValue.trim()} type="primary" shape="circle" icon={<SendOutlined />} /></div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </>
+              </>
             ) : (
               <div className="flex-1 flex items-center justify-center px-8">
                 <div className="max-w-md text-center">
@@ -1034,11 +1130,11 @@ const StudentWorkspace = () => {
               <header className="h-20 border-b border-gray-100 px-8 flex items-center justify-between bg-white sticky top-0 z-10 shrink-0">
                 <div className="flex flex-col"><h2 className="text-[14px] font-black text-indigo-500 uppercase tracking-[0.2em] m-0">Venture Editor</h2><span className="text-[9px] text-slate-300 font-bold uppercase">{activeProjectId ? 'Project Editing' : 'Draft Preparation'}</span></div>
                 <div className="flex gap-3">
-                  <Button 
-                    onClick={() => saveContent(editorContent)} 
+                  <Button
+                    onClick={() => saveContent(editorContent)}
                     loading={isSaving}
-                    type="primary" 
-                    shape="round" 
+                    type="primary"
+                    shape="round"
                     className="h-10 px-10 font-black bg-indigo-600 border-none shadow-lg shadow-indigo-200"
                   >
                     保存项目
@@ -1072,72 +1168,72 @@ const StudentWorkspace = () => {
                         {hasProjectDocumentView ? (
                           <div className="prose prose-slate max-w-none flex-1 flex flex-col">
                             {/* 工具栏与多文件标签 */}
-                              <div className="flex items-center justify-between mb-4">
-                                <div className="flex flex-col">
-                                  <span className="text-xl font-black text-slate-800 tracking-tight">项目归档附录</span>
-                                  <span className="text-xs text-slate-400 font-bold mt-1">云端附件列表 (PDF/Docx)</span>
-                                </div>
-                                <div className="flex items-center gap-3">
-                                  {isSaving && <span className="text-[10px] text-indigo-400 font-black animate-pulse uppercase">Saving...</span>}
-                                  <Button icon={<CloudUploadOutlined />} onClick={() => setShowImportModal(true)} shape="round" className="bg-slate-50 border border-slate-200 text-slate-600 hover:border-indigo-300 font-bold shadow-sm">追加附件文档</Button>
-                                </div>
+                            <div className="flex items-center justify-between mb-4">
+                              <div className="flex flex-col">
+                                <span className="text-xl font-black text-slate-800 tracking-tight">项目归档附录</span>
+                                <span className="text-xs text-slate-400 font-bold mt-1">云端附件列表 (PDF/Docx)</span>
                               </div>
-
-                              {/* 横向附件 Chips 列表 */}
-                              <div className="w-full overflow-x-auto pb-4 no-scrollbar border-b border-indigo-50 flex gap-3 items-center min-h-[50px]">
-                                {projectFiles.length > 0 ? projectFiles.map(file => (
-                                  <div
-                                    key={file.id}
-                                    onClick={() => { 
-                                      setActiveFileUrl(file.file_url); 
-                                      handleFileTabChange(file.id); 
-                                    }}
-                                    className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all cursor-pointer whitespace-nowrap shrink-0 max-w-[160px] ${activeFileId === file.id ? 'bg-indigo-600 border-indigo-700 shadow-md scale-105' : 'bg-white border-slate-200 hover:border-indigo-300 hover:bg-slate-50'}`}
-                                  >
-                                    {file.file_type === 'pdf' || file.filename.toLowerCase().endsWith('.pdf') ? <FilePdfOutlined className={activeFileId === file.id ? 'text-white' : 'text-rose-500'} /> : <FileWordOutlined className={activeFileId === file.id ? 'text-white' : 'text-blue-500'} />}
-                                    <Tooltip title={file.filename}><span className={`text-[11px] font-black truncate w-full ${activeFileId === file.id ? 'text-white' : 'text-slate-600'}`}>{file.filename}</span></Tooltip>
-                                    <Popconfirm title="确定删除该附件？" onConfirm={(e) => { e.stopPropagation(); handleDeleteFile(file.id, file.file_url); }} okText="删除" cancelText="取消">
-                                      <CloseOutlined onClick={e => e.stopPropagation()} className={`text-[9px] ml-1 font-bold ${activeFileId === file.id ? 'text-indigo-200 hover:text-white' : 'text-slate-300 hover:text-rose-500'}`} />
-                                    </Popconfirm>
-                                  </div>
-                                )) : <span className="text-[11px] text-slate-400 font-bold italic w-full text-center">系统检测到暂无关联原始附件</span>}
-                              </div>
-
-                              {/* 内容预览或编辑区 - 响应式分栏布局 */}
-                              <div className="flex-1 mt-6 relative flex gap-6 min-h-[600px]">
-                                {/* 左栏：项目正文编辑区 */}
-                                <div className="flex-1 rounded-3xl overflow-hidden border border-slate-200 shadow-inner group flex flex-col">
-                                  <div className="h-10 bg-slate-50 border-b border-slate-200 flex items-center px-4 shrink-0 shadow-sm z-10 justify-between">
-                                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">编辑工作区 (Editor)</span>
-                                  </div>
-                                  <textarea className="w-full flex-1 bg-slate-50/50 p-8 text-sm leading-relaxed text-slate-600 font-medium resize-none outline-none focus:bg-white focus:border-indigo-300 transition-all custom-scrollbar" value={editorContent} onChange={e => setEditorContent(e.target.value)} placeholder="所选文档的内容草稿将在此显示，您可以手动合并或润色..." />
-                                </div>
-                                
-                                {/* 右栏：原文件参照预览 (PDF/Docx) */}
-                                {activeFileUrl && (
-                                  <div className="flex-1 flex flex-col rounded-3xl overflow-hidden border border-slate-200 shadow-inner bg-slate-100 flex-none w-1/2 animate-slide-in">
-                                    <div className="h-10 bg-slate-50 border-b border-slate-200 flex items-center px-4 shrink-0 shadow-sm z-10 justify-between">
-                                      <div className="flex items-center gap-2">
-                                        <div className={`w-2.5 h-2.5 rounded-full ${activeFileUrl.toLowerCase().endsWith('.pdf') ? 'bg-rose-500' : 'bg-blue-500'}`}></div>
-                                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                                          {activeFileUrl.toLowerCase().endsWith('.pdf') ? 'PDF Source Reference (Read-only)' : 'Docx Content Preview'}
-                                        </span>
-                                      </div>
-                                      <a href={buildAssetUrl(activeFileUrl)} download className="text-[9px] font-black text-indigo-500 hover:text-indigo-700">下载原件</a>
-                                    </div>
-                                    {activeFileUrl.toLowerCase().endsWith('.pdf') ? (
-                                      <iframe src={buildAssetUrl(activeFileUrl)} className="w-full flex-1 border-none" title="PDF Preview" />
-                                    ) : (
-                                      <div className="w-full flex-1 bg-white p-10 overflow-y-auto custom-scrollbar shadow-inner">
-                                        <div className="max-w-2xl mx-auto py-8 text-slate-700 leading-relaxed font-serif whitespace-pre-wrap">
-                                          {editorContent || "正在尝试加载高清预览内容..."}
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
+                              <div className="flex items-center gap-3">
+                                {isSaving && <span className="text-[10px] text-indigo-400 font-black animate-pulse uppercase">Saving...</span>}
+                                <Button icon={<CloudUploadOutlined />} onClick={() => setShowImportModal(true)} shape="round" className="bg-slate-50 border border-slate-200 text-slate-600 hover:border-indigo-300 font-bold shadow-sm">追加附件文档</Button>
                               </div>
                             </div>
+
+                            {/* 横向附件 Chips 列表 */}
+                            <div className="w-full overflow-x-auto pb-4 no-scrollbar border-b border-indigo-50 flex gap-3 items-center min-h-[50px]">
+                              {projectFiles.length > 0 ? projectFiles.map(file => (
+                                <div
+                                  key={file.id}
+                                  onClick={() => {
+                                    setActiveFileUrl(file.file_url);
+                                    handleFileTabChange(file.id);
+                                  }}
+                                  className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all cursor-pointer whitespace-nowrap shrink-0 max-w-[160px] ${activeFileId === file.id ? 'bg-indigo-600 border-indigo-700 shadow-md scale-105' : 'bg-white border-slate-200 hover:border-indigo-300 hover:bg-slate-50'}`}
+                                >
+                                  {file.file_type === 'pdf' || file.filename.toLowerCase().endsWith('.pdf') ? <FilePdfOutlined className={activeFileId === file.id ? 'text-white' : 'text-rose-500'} /> : <FileWordOutlined className={activeFileId === file.id ? 'text-white' : 'text-blue-500'} />}
+                                  <Tooltip title={file.filename}><span className={`text-[11px] font-black truncate w-full ${activeFileId === file.id ? 'text-white' : 'text-slate-600'}`}>{file.filename}</span></Tooltip>
+                                  <Popconfirm title="确定删除该附件？" onConfirm={(e) => { e.stopPropagation(); handleDeleteFile(file.id, file.file_url); }} okText="删除" cancelText="取消">
+                                    <CloseOutlined onClick={e => e.stopPropagation()} className={`text-[9px] ml-1 font-bold ${activeFileId === file.id ? 'text-indigo-200 hover:text-white' : 'text-slate-300 hover:text-rose-500'}`} />
+                                  </Popconfirm>
+                                </div>
+                              )) : <span className="text-[11px] text-slate-400 font-bold italic w-full text-center">系统检测到暂无关联原始附件</span>}
+                            </div>
+
+                            {/* 内容预览或编辑区 - 响应式分栏布局 */}
+                            <div className="flex-1 mt-6 relative flex gap-6 min-h-[600px]">
+                              {/* 左栏：项目正文编辑区 */}
+                              <div className="flex-1 rounded-3xl overflow-hidden border border-slate-200 shadow-inner group flex flex-col">
+                                <div className="h-10 bg-slate-50 border-b border-slate-200 flex items-center px-4 shrink-0 shadow-sm z-10 justify-between">
+                                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">编辑工作区 (Editor)</span>
+                                </div>
+                                <textarea className="w-full flex-1 bg-slate-50/50 p-8 text-sm leading-relaxed text-slate-600 font-medium resize-none outline-none focus:bg-white focus:border-indigo-300 transition-all custom-scrollbar" value={editorContent} onChange={e => setEditorContent(e.target.value)} placeholder="所选文档的内容草稿将在此显示，您可以手动合并或润色..." />
+                              </div>
+
+                              {/* 右栏：原文件参照预览 (PDF/Docx) */}
+                              {activeFileUrl && (
+                                <div className="flex-1 flex flex-col rounded-3xl overflow-hidden border border-slate-200 shadow-inner bg-slate-100 flex-none w-1/2 animate-slide-in">
+                                  <div className="h-10 bg-slate-50 border-b border-slate-200 flex items-center px-4 shrink-0 shadow-sm z-10 justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <div className={`w-2.5 h-2.5 rounded-full ${activeFileUrl.toLowerCase().endsWith('.pdf') ? 'bg-rose-500' : 'bg-blue-500'}`}></div>
+                                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                                        {activeFileUrl.toLowerCase().endsWith('.pdf') ? 'PDF Source Reference (Read-only)' : 'Docx Content Preview'}
+                                      </span>
+                                    </div>
+                                    <a href={buildAssetUrl(activeFileUrl)} download className="text-[9px] font-black text-indigo-500 hover:text-indigo-700">下载原件</a>
+                                  </div>
+                                  {activeFileUrl.toLowerCase().endsWith('.pdf') ? (
+                                    <iframe src={buildAssetUrl(activeFileUrl)} className="w-full flex-1 border-none" title="PDF Preview" />
+                                  ) : (
+                                    <div className="w-full flex-1 bg-white p-10 overflow-y-auto custom-scrollbar shadow-inner">
+                                      <div className="max-w-2xl mx-auto py-8 text-slate-700 leading-relaxed font-serif whitespace-pre-wrap">
+                                        {editorContent || "正在尝试加载高清预览内容..."}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         ) : (
                           <div className="h-full flex flex-col items-center justify-center py-24 text-center space-y-8">
                             <div className="w-24 h-24 bg-slate-50 rounded-[35%] flex items-center justify-center text-slate-200 text-5xl animate-pulse shadow-inner"><FileTextOutlined /></div>
@@ -1334,7 +1430,7 @@ const StudentWorkspace = () => {
                 <div className="review-content text-amber-50/90 leading-relaxed font-medium">
                   <ReactMarkdown>{activeReview}</ReactMarkdown>
                   <Divider className="border-white/10 my-8" />
-                  
+
                   {/* 合规免责预警标识 */}
                   <div className="mt-8 p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-start gap-3">
                     <SafetyCertificateOutlined className="text-amber-400 text-lg mt-0.5" />
@@ -1429,19 +1525,19 @@ const StudentWorkspace = () => {
             <div className="w-16 h-16 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center text-3xl mb-2"><FileSearchOutlined /></div>
             <div>
               <h2 className="text-xl font-black text-slate-800 m-0 mb-2">选择 AI 评估标准配置台</h2>
-              <p className="text-sm font-bold text-slate-400">请选择目标赛事的诊断模型，<br/>以便大语言模型进行精准对齐分析。</p>
+              <p className="text-sm font-bold text-slate-400">请选择目标赛事的诊断模型，<br />以便大语言模型进行精准对齐分析。</p>
             </div>
-            
+
             <div className="flex gap-4 w-full">
-              <div 
-                onClick={() => setSelectedRubric("互联网+")} 
+              <div
+                onClick={() => setSelectedRubric("互联网+")}
                 className={`flex-1 p-6 rounded-[24px] border-2 cursor-pointer transition-all ${selectedRubric === "互联网+" ? 'border-blue-500 bg-blue-50/50 shadow-lg shadow-blue-100' : 'border-slate-100 hover:border-blue-200'}`}
               >
                 <div className="text-lg font-black text-slate-700 mb-1">互联网+</div>
                 <div className="text-[10px] text-slate-400 tracking-widest uppercase font-bold">侧重商业模式</div>
               </div>
-              <div 
-                onClick={() => setSelectedRubric("挑战杯")} 
+              <div
+                onClick={() => setSelectedRubric("挑战杯")}
                 className={`flex-1 p-6 rounded-[24px] border-2 cursor-pointer transition-all ${selectedRubric === "挑战杯" ? 'border-purple-500 bg-purple-50/50 shadow-lg shadow-purple-100' : 'border-slate-100 hover:border-purple-200'}`}
               >
                 <div className="text-lg font-black text-slate-700 mb-1">挑战杯</div>
@@ -1461,110 +1557,165 @@ const StudentWorkspace = () => {
             <div className="flex items-center justify-between mb-8">
               <div className="flex items-center gap-3"><div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-500 text-2xl"><RadarChartOutlined /></div><div><h3 className="text-xl font-black text-slate-800 mb-0">盈亏平衡分析模型</h3><span className="text-[10px] uppercase font-bold tracking-widest text-emerald-500">Financial Breakeven Point</span></div></div>
             </div>
-            
+
             <div className="grid grid-cols-2 gap-8">
               <div className="space-y-6">
                 <div className="space-y-4">
-                   <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">预估核心用户基数 / 月</label><Input type="number" value={financeData.users} onChange={e => setFinanceData({...financeData, users: Number(e.target.value)})} className="h-12 rounded-xl bg-slate-50 border-none px-4 font-black text-slate-700" /></div>
-                   <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">获客成本 (CAC) / 人</label><Input type="number" value={financeData.cac} onChange={e => setFinanceData({...financeData, cac: Number(e.target.value)})} prefix="¥" className="h-12 rounded-xl bg-slate-50 border-none px-4 font-black" /></div>
-                   <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">ARPU 单客收入 / 月</label><Input type="number" value={financeData.arpu} onChange={e => setFinanceData({...financeData, arpu: Number(e.target.value)})} prefix="¥" className="h-12 rounded-xl bg-slate-50 border-none px-4 font-black" /></div>
-                   <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">硬性固定成本 / 月</label><Input type="number" value={financeData.fixedCost} onChange={e => setFinanceData({...financeData, fixedCost: Number(e.target.value)})} prefix="¥" className="h-12 rounded-xl bg-slate-50 border-none px-4 font-black" /></div>
+                  <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">预估核心用户基数 / 月</label><Input type="number" value={financeData.users} onChange={e => setFinanceData({ ...financeData, users: Number(e.target.value) })} className="h-12 rounded-xl bg-slate-50 border-none px-4 font-black text-slate-700" /></div>
+                  <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">获客成本 (CAC) / 人</label><Input type="number" value={financeData.cac} onChange={e => setFinanceData({ ...financeData, cac: Number(e.target.value) })} prefix="¥" className="h-12 rounded-xl bg-slate-50 border-none px-4 font-black" /></div>
+                  <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">ARPU 单客收入 / 月</label><Input type="number" value={financeData.arpu} onChange={e => setFinanceData({ ...financeData, arpu: Number(e.target.value) })} prefix="¥" className="h-12 rounded-xl bg-slate-50 border-none px-4 font-black" /></div>
+                  <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">硬性固定成本 / 月</label><Input type="number" value={financeData.fixedCost} onChange={e => setFinanceData({ ...financeData, fixedCost: Number(e.target.value) })} prefix="¥" className="h-12 rounded-xl bg-slate-50 border-none px-4 font-black" /></div>
                 </div>
+
+                <button
+                  onClick={handleFinancialAnalysis}
+                  disabled={isFinancialAnalyzing}
+                  className={`w-full mt-6 h-14 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 border-none font-black text-white shadow-lg shadow-emerald-200 hover:shadow-xl hover:scale-[1.02] transition-all flex items-center justify-center text-sm gap-2 ${isFinancialAnalyzing ? 'opacity-50 cursor-not-allowed cursor-wait' : 'cursor-pointer'}`}
+                >
+                  <RocketOutlined className="text-xl" />
+                  {isFinancialAnalyzing ? "正在进行深度风控推演..." : "运行AI金融透视"}
+                </button>
               </div>
               <div className="bg-slate-900 rounded-[32px] p-8 text-white relative overflow-hidden flex flex-col justify-center">
-                 <div className="absolute top-0 right-0 w-40 h-40 bg-emerald-500/20 blur-[50px] rounded-full"></div>
-                 <h4 className="text-[11px] uppercase tracking-[0.2em] text-emerald-400 font-black mb-6">AI 测算结果洞察</h4>
-                 
-                 <div className="space-y-6">
-                    <div className="flex justify-between items-center pb-4 border-b border-white/10">
-                      <span className="text-slate-400 text-sm font-bold">月度总营收</span>
-                      <span className="text-2xl font-black">¥ {(financeData.users * financeData.arpu).toLocaleString()}</span>
+                <div className="absolute top-0 right-0 w-40 h-40 bg-emerald-500/20 blur-[50px] rounded-full"></div>
+                <h4 className="text-[11px] uppercase tracking-[0.2em] text-emerald-400 font-black mb-6">AI 测算结果洞察</h4>
+
+                <div className="space-y-6">
+                  <div className="flex justify-between items-center pb-4 border-b border-white/10">
+                    <span className="text-slate-400 text-sm font-bold">月度总营收</span>
+                    <span className="text-2xl font-black">¥ {(financeData.users * financeData.arpu).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between items-center pb-4 border-b border-white/10">
+                    <span className="text-slate-400 text-sm font-bold">月度总成本</span>
+                    <span className="text-2xl font-black">¥ {(financeData.fixedCost + (financeData.users * financeData.cac)).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between items-end pt-2">
+                    <span className="text-slate-400 text-sm font-bold">净利润 (Net Profit)</span>
+                    <div className="text-right">
+                      <span className={`text-4xl font-black ${(financeData.users * financeData.arpu) - (financeData.fixedCost + (financeData.users * financeData.cac)) > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>¥ {((financeData.users * financeData.arpu) - (financeData.fixedCost + (financeData.users * financeData.cac))).toLocaleString()}</span>
                     </div>
-                    <div className="flex justify-between items-center pb-4 border-b border-white/10">
-                      <span className="text-slate-400 text-sm font-bold">月度总成本</span>
-                      <span className="text-2xl font-black">¥ {(financeData.fixedCost + (financeData.users * financeData.cac)).toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between items-end pt-2">
-                       <span className="text-slate-400 text-sm font-bold">净利润 (Net Profit)</span>
-                       <div className="text-right">
-                         <span className={`text-4xl font-black ${(financeData.users * financeData.arpu) - (financeData.fixedCost + (financeData.users * financeData.cac)) > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>¥ {((financeData.users * financeData.arpu) - (financeData.fixedCost + (financeData.users * financeData.cac))).toLocaleString()}</span>
-                       </div>
-                    </div>
-                 </div>
-                 <div className="mt-8 text-[10px] text-slate-400 leading-relaxed font-bold bg-white/5 p-4 rounded-xl">
-                   💡 {((financeData.users * financeData.arpu) - (financeData.fixedCost + (financeData.users * financeData.cac))) > 0 ? '商业模式已达到初步模型测算的盈亏平衡点，具有较强的长效可持续性。建议进一步考虑规模效应带来的边际成本递减规律，优化上游供应链。' : '目前该商业模型处于亏损区间。在参加互联网+等侧重商业落地的赛事中，极易受到评委质疑。建议进一步降低 CAC 获取高净值用户，或探索跨界 IP 等多元化营收路径提升 ARPU 空间。'}
-                 </div>
+                  </div>
+                </div>
+                <div className="mt-6 text-[10px] text-slate-400 leading-relaxed font-bold bg-white/5 p-4 rounded-xl">
+                  💡 {((financeData.users * financeData.arpu) - (financeData.fixedCost + (financeData.users * financeData.cac))) > 0 ? '商业模式已达到初步模型测算的盈亏平衡点，具有较强的长效可持续性。建议进一步考虑规模效应带来的边际成本递减规律，优化上游供应链。' : '目前该商业模型处于亏损区间。在参加互联网+等侧重商业落地的赛事中，极易受到评委质疑。建议进一步降低 CAC 获取高净值用户，或探索跨界 IP 等多元化营收路径提升 ARPU 空间。'}
+                </div>
+
+                {isFinancialAnalyzing && (
+                  <div className="mt-4 p-6 bg-slate-800/50 rounded-2xl border border-dashed border-emerald-500/30 flex flex-col items-center justify-center text-center animate-pulse">
+                    <Spin size="large" />
+                    <span className="mt-3 text-[11px] text-emerald-400 font-bold tracking-widest uppercase">DeepSeek Pro 尽调网络神经唤醒中...</span>
+                    <span className="mt-1 text-[9px] text-slate-500">正在融合当前项目背景文档与数字模型进行实景沙盘验证</span>
+                  </div>
+                )}
+
+                {/* 核心破局：白盒推演科普面板 */}
+                <div className="mt-4 pt-4 border-t border-white/10">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-5 h-5 rounded-md bg-emerald-500/20 text-emerald-400 flex items-center justify-center"><InfoCircleOutlined className="text-[10px]" /></div>
+                    <span className="text-[10px] uppercase font-black tracking-widest text-emerald-400">底层测算推演公式 (White-box Formula)</span>
+                  </div>
+                  <div className="space-y-2 text-[10px] text-slate-400 font-medium">
+                    <p className="m-0"><strong className="text-white">宏观创收模型 (LTV)</strong> = ∑ (预估用户基数 × ARPU)</p>
+                    <p className="m-0"><strong className="text-white">渠道冷启动耗损</strong> = ∑ (预估用户基数 × CAC)</p>
+                    <p className="m-0"><strong className="text-white">净收益安全阀</strong> = 宏观创收 - (渠道耗损 + 硬性固定成本)</p>
+                  </div>
+                </div>
               </div>
             </div>
+          </div>
+        </Modal>
+
+        {/* --- 独立的 AI 金融尽调报告弹窗 --- */}
+        <Modal open={showFinancialResultModal} onCancel={() => setShowFinancialResultModal(false)} footer={null} centered width={550} className="premium-modal no-border-modal" zIndex={1050}>
+          <div className="bg-slate-900 rounded-[32px] p-8 text-white relative overflow-hidden flex flex-col justify-center border border-indigo-500/30">
+            <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500/20 blur-[60px] rounded-full point-events-none"></div>
+            <h4 className="text-[14px] uppercase tracking-[0.2em] text-indigo-400 font-black mb-6 flex items-center justify-center gap-2"><RocketOutlined /> DeepSeek 商业尽调回执</h4>
+
+            {financialAdvice && (
+              <div className="animate-slide-up space-y-4 relative z-10">
+                <div className="p-5 bg-rose-500/10 border border-rose-500/20 rounded-xl hover:bg-rose-500/20 transition-all">
+                  <div className="flex items-center gap-2 mb-2.5"><div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse shadow-[0_0_8px_theme(colors.rose.500)]"></div><h5 className="m-0 text-[12px] font-black text-rose-400 uppercase tracking-widest">核心危机预警 (Risk Assessment)</h5></div>
+                  <p className="m-0 text-[13px] text-slate-300 leading-relaxed font-medium">{typeof financialAdvice.risk_assessment === 'object' ? JSON.stringify(financialAdvice.risk_assessment) : (financialAdvice.risk_assessment || '无显式风险')}</p>
+                </div>
+                <div className="p-5 bg-indigo-500/10 border border-indigo-500/20 rounded-xl hover:bg-indigo-500/20 transition-all">
+                  <div className="flex items-center gap-2 mb-2.5"><div className="w-2 h-2 rounded-full bg-indigo-500 shadow-[0_0_8px_theme(colors.indigo.500)]"></div><h5 className="m-0 text-[12px] font-black text-indigo-400 uppercase tracking-widest">增长杠杆核查 (Growth Leverage)</h5></div>
+                  <p className="m-0 text-[13px] text-slate-300 leading-relaxed font-medium">{typeof financialAdvice.growth_leverage === 'object' ? JSON.stringify(financialAdvice.growth_leverage) : (financialAdvice.growth_leverage || '无测算数据')}</p>
+                </div>
+                <div className="p-5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl hover:bg-emerald-500/20 transition-all">
+                  <div className="flex items-center gap-2 mb-2.5"><div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_theme(colors.emerald.500)]"></div><h5 className="m-0 text-[12px] font-black text-emerald-400 uppercase tracking-widest">下阶段优化靶向 (Target Metric focus)</h5></div>
+                  <p className="m-0 text-[13px] text-slate-300 leading-relaxed font-medium">{typeof financialAdvice.next_metric_focus === 'object' ? JSON.stringify(financialAdvice.next_metric_focus) : (financialAdvice.next_metric_focus || '建议保持当前运营动作')}</p>
+                </div>
+              </div>
+            )}
           </div>
         </Modal>
 
         {/* --- 全真路演模拟 --- */}
         <Modal open={showPitchModal} onCancel={() => { setShowPitchModal(false); setIsPitching(false); setPitchTime(300); }} footer={null} centered width={1000} className="premium-modal no-border-modal bg-transparent shadow-none" modalRender={(node) => (<div className="modal-content-wrapper">{node}</div>)}>
           <div className="bg-slate-950 rounded-[40px] overflow-hidden border border-white/10 shadow-2xl relative text-white flex flex-col h-[650px] shadow-indigo-900/40">
-             {/* 顶部横幅 */}
-             <div className="h-16 border-b border-white/10 flex items-center justify-between px-8 bg-black/40 shrink-0">
-               <div className="flex items-center gap-3"><div className={`w-2.5 h-2.5 rounded-full ${isPitching ? 'bg-rose-500 animate-pulse' : 'bg-slate-500'}`}></div><span className={`font-black tracking-[0.2em] text-[11px] uppercase ${isPitching ? 'text-rose-500' : 'text-slate-500'}`}>Live Pitch Mode</span></div>
-               <div className="font-mono text-3xl font-black text-white tracking-widest">{Math.floor(pitchTime / 60).toString().padStart(2, '0')}:{(pitchTime % 60).toString().padStart(2, '0')}</div>
-               <Button onClick={() => { setIsPitching(!isPitching); if (!isPitching) message.info('路演计时开始！深呼吸，准备迎接提问。'); }} shape="round" className={`border-none font-black px-6 shadow-lg ${isPitching ? 'bg-rose-500 text-white hover:bg-rose-600' : 'bg-indigo-500 text-white hover:bg-indigo-600'}`}>{isPitching ? '中止路演' : '进入备赛计时状态'}</Button>
-             </div>
-             
-             {/* 主视野 */}
-             <div className="flex-1 flex">
-               <div className="flex-[2] border-r border-white/10 p-10 flex flex-col justify-between relative bg-gradient-to-br from-slate-900 to-black overflow-hidden">
-                 <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
-                 
-                 {/* Virtual Stage View */}
-                 <div className="relative z-10 flex flex-col items-center justify-center h-full text-center">
-                    <div className="w-32 h-32 rounded-full border-4 border-slate-800 bg-slate-900 flex flex-col items-center justify-center mb-6 shadow-2xl shadow-indigo-500/20">
-                      <TeamOutlined className="text-4xl text-slate-600 mb-2" />
-                      <span className="text-[9px] font-black uppercase text-slate-500 tracking-widest">Presenter</span>
+            {/* 顶部横幅 */}
+            <div className="h-16 border-b border-white/10 flex items-center justify-between px-8 bg-black/40 shrink-0">
+              <div className="flex items-center gap-3"><div className={`w-2.5 h-2.5 rounded-full ${isPitching ? 'bg-rose-500 animate-pulse' : 'bg-slate-500'}`}></div><span className={`font-black tracking-[0.2em] text-[11px] uppercase ${isPitching ? 'text-rose-500' : 'text-slate-500'}`}>Live Pitch Mode</span></div>
+              <div className="font-mono text-3xl font-black text-white tracking-widest">{Math.floor(pitchTime / 60).toString().padStart(2, '0')}:{(pitchTime % 60).toString().padStart(2, '0')}</div>
+              <Button onClick={() => { setIsPitching(!isPitching); if (!isPitching) message.info('路演计时开始！深呼吸，准备迎接提问。'); }} shape="round" className={`border-none font-black px-6 shadow-lg ${isPitching ? 'bg-rose-500 text-white hover:bg-rose-600' : 'bg-indigo-500 text-white hover:bg-indigo-600'}`}>{isPitching ? '中止路演' : '进入备赛计时状态'}</Button>
+            </div>
+
+            {/* 主视野 */}
+            <div className="flex-1 flex">
+              <div className="flex-[2] border-r border-white/10 p-10 flex flex-col justify-between relative bg-gradient-to-br from-slate-900 to-black overflow-hidden">
+                <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
+
+                {/* Virtual Stage View */}
+                <div className="relative z-10 flex flex-col items-center justify-center h-full text-center">
+                  <div className="w-32 h-32 rounded-full border-4 border-slate-800 bg-slate-900 flex flex-col items-center justify-center mb-6 shadow-2xl shadow-indigo-500/20">
+                    <TeamOutlined className="text-4xl text-slate-600 mb-2" />
+                    <span className="text-[9px] font-black uppercase text-slate-500 tracking-widest">Presenter</span>
+                  </div>
+                  <h2 className="text-3xl font-black tracking-tight text-white mb-4">{(syncData.projects || []).find(p => p.id === activeProjectId)?.name || '未命名演示项目剧场'}</h2>
+                  <p className="text-slate-400 font-medium max-w-sm mx-auto leading-relaxed">全息路演极压模拟环境已开启，大赛 AI 智库评委已落座核心席位。您有 5 分钟时间，请在限时内完成对商业模式闭环的现场讲演。</p>
+                </div>
+              </div>
+
+              {/* 评委聊天框 */}
+              <div className="flex-[1.2] bg-slate-950 flex flex-col relative z-20">
+                <div className="p-5 border-b border-white/10 flex items-center gap-3 bg-black/40">
+                  <Avatar src="https://api.dicebear.com/7.x/avataaars/svg?seed=Investor" className="bg-amber-100" />
+                  <div>
+                    <p className="text-sm font-black m-0 text-white tracking-widest">VentureCapital AI</p>
+                    <p className="text-[9px] text-amber-500 font-bold uppercase tracking-widest m-0">虚拟主评委 (评委席一栏)</p>
+                  </div>
+                </div>
+                <div className="flex-1 p-6 overflow-y-auto space-y-6 custom-scrollbar bg-slate-900/60">
+                  {isPitching ? (
+                    <div className="flex flex-col gap-6 animate-fade-in">
+                      {pitchTime <= 270 && (
+                        <div className="flex flex-col items-start gap-2 max-w-[95%] animate-slide-in">
+                          <span className="text-[10px] text-slate-500 font-bold ml-1">答辩环节 00:30 (基于您的项目文档)</span>
+                          <div className="bg-slate-800 p-4 rounded-2xl rounded-tl-none text-sm text-slate-200 leading-relaxed border border-slate-700 shadow-md">您好，请开始您的路演。我们更想听听，相比于已经在市场上拿到份额的巨头，你们项目最重要的壁垒和护城河究竟是什么？</div>
+                        </div>
+                      )}
+                      {pitchTime <= 195 && (
+                        <div className="flex flex-col items-start gap-2 max-w-[95%] animate-slide-in">
+                          <span className="text-[10px] text-slate-500 font-bold ml-1">压力追问 02:15</span>
+                          <div className="bg-slate-800 p-4 rounded-2xl rounded-tl-none text-sm text-slate-200 leading-relaxed border border-rose-900/50 shadow-md shadow-rose-900/10">刚才提到的获客渠道似乎过于理想化。如果在早期缺乏流量杠杆的情况下，你们预期的冷启动 CAC (获客成本) 如果翻了一倍，你们的现金流还能不能运转？</div>
+                        </div>
+                      )}
+                      {pitchTime <= 80 && (
+                        <div className="flex flex-col items-start gap-2 max-w-[95%] animate-slide-in">
+                          <span className="text-[10px] text-slate-500 font-bold ml-1">技术复核 03:40</span>
+                          <div className="bg-slate-800 p-4 rounded-2xl rounded-tl-none text-sm text-slate-200 leading-relaxed border border-slate-700 shadow-md">技术方案中的某些参数没有第三方权威检测报告。在省赛、国赛阶段，专家们不会只听描述，你们团队有什么核心背书来证明技术成熟度？</div>
+                        </div>
+                      )}
                     </div>
-                    <h2 className="text-3xl font-black tracking-tight text-white mb-4">{(syncData.projects || []).find(p => p.id === activeProjectId)?.name || '未命名演示项目剧场'}</h2>
-                    <p className="text-slate-400 font-medium max-w-sm mx-auto leading-relaxed">全息路演极压模拟环境已开启，大赛 AI 智库评委已落座核心席位。您有 5 分钟时间，请在限时内完成对商业模式闭环的现场讲演。</p>
-                 </div>
-               </div>
-               
-               {/* 评委聊天框 */}
-               <div className="flex-[1.2] bg-slate-950 flex flex-col relative z-20">
-                 <div className="p-5 border-b border-white/10 flex items-center gap-3 bg-black/40">
-                   <Avatar src="https://api.dicebear.com/7.x/avataaars/svg?seed=Investor" className="bg-amber-100" />
-                   <div>
-                     <p className="text-sm font-black m-0 text-white tracking-widest">VentureCapital AI</p>
-                     <p className="text-[9px] text-amber-500 font-bold uppercase tracking-widest m-0">虚拟主评委 (评委席一栏)</p>
-                   </div>
-                 </div>
-                 <div className="flex-1 p-6 overflow-y-auto space-y-6 custom-scrollbar bg-slate-900/60">
-                    {isPitching ? (
-                      <div className="flex flex-col gap-6 animate-fade-in">
-                        {pitchTime <= 270 && (
-                          <div className="flex flex-col items-start gap-2 max-w-[95%] animate-slide-in">
-                            <span className="text-[10px] text-slate-500 font-bold ml-1">答辩环节 00:30 (基于您的项目文档)</span>
-                            <div className="bg-slate-800 p-4 rounded-2xl rounded-tl-none text-sm text-slate-200 leading-relaxed border border-slate-700 shadow-md">您好，请开始您的路演。我们更想听听，相比于已经在市场上拿到份额的巨头，你们项目最重要的壁垒和护城河究竟是什么？</div>
-                          </div>
-                        )}
-                        {pitchTime <= 195 && (
-                          <div className="flex flex-col items-start gap-2 max-w-[95%] animate-slide-in">
-                            <span className="text-[10px] text-slate-500 font-bold ml-1">压力追问 02:15</span>
-                            <div className="bg-slate-800 p-4 rounded-2xl rounded-tl-none text-sm text-slate-200 leading-relaxed border border-rose-900/50 shadow-md shadow-rose-900/10">刚才提到的获客渠道似乎过于理想化。如果在早期缺乏流量杠杆的情况下，你们预期的冷启动 CAC (获客成本) 如果翻了一倍，你们的现金流还能不能运转？</div>
-                          </div>
-                        )}
-                        {pitchTime <= 80 && (
-                          <div className="flex flex-col items-start gap-2 max-w-[95%] animate-slide-in">
-                            <span className="text-[10px] text-slate-500 font-bold ml-1">技术复核 03:40</span>
-                            <div className="bg-slate-800 p-4 rounded-2xl rounded-tl-none text-sm text-slate-200 leading-relaxed border border-slate-700 shadow-md">技术方案中的某些参数没有第三方权威检测报告。在省赛、国赛阶段，专家们不会只听描述，你们团队有什么核心背书来证明技术成熟度？</div>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="h-full flex items-center justify-center text-center flex-col gap-4">
-                        <div className="w-14 h-14 bg-white/5 rounded-2xl flex items-center justify-center text-slate-600 text-2xl shadow-inner"><MessageOutlined /></div>
-                        <span className="text-[10px] uppercase tracking-widest font-black text-slate-400 max-w-[200px]">点击顶部【进入备赛计时状态】按钮以激活 AI 毒舌评委席的现场随机追问</span>
-                      </div>
-                    )}
-                 </div>
-               </div>
-             </div>
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-center flex-col gap-4">
+                      <div className="w-14 h-14 bg-white/5 rounded-2xl flex items-center justify-center text-slate-600 text-2xl shadow-inner"><MessageOutlined /></div>
+                      <span className="text-[10px] uppercase tracking-widest font-black text-slate-400 max-w-[200px]">点击顶部【进入备赛计时状态】按钮以激活 AI 毒舌评委席的现场随机追问</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         </Modal>
 
@@ -1627,10 +1778,10 @@ const StudentWorkspace = () => {
           </div>
         </Modal>
 
-        <UserProfileModal 
-          visible={showProfileModal} 
-          onCancel={() => setShowProfileModal(false)} 
-          username={localStorage.getItem('va_username') || 'student'} 
+        <UserProfileModal
+          visible={showProfileModal}
+          onCancel={() => setShowProfileModal(false)}
+          username={localStorage.getItem('va_username') || 'student'}
         />
       </div>
     </ConfigProvider>
