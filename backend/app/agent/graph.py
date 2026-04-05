@@ -175,6 +175,14 @@ class ProjectCoachResponse(BaseModel):
     failure_inference: str = Field(
         description="前端推理过程第 2 段：基于成功项目反推学生想法更容易失败的原因。"
     )
+    graph_nodes: list[ReasoningGraphNode] | None = Field(
+        default=None,
+        description="4 到 6 个图谱节点，显式体现问题、证据、风险与行动路径。"
+    )
+    graph_edges: list[ReasoningGraphEdge] | None = Field(
+        default=None,
+        description="4 到 6 条图谱边，体现从项目问题到诊断与行动的关系。"
+    )
 
 
 def _get_recent_user_context(messages: list[BaseMessage], limit: int = 3) -> tuple[list[str], str]:
@@ -259,6 +267,36 @@ def _build_fallback_tutor_graph(
             {"source": "concept", "target": "mistake", "label": "易被误解为"},
             {"source": "concept", "target": "action", "label": "落到练习"},
             {"source": "case", "target": "action", "label": "提供启发"},
+        ],
+    }
+
+
+def _build_fallback_coach_graph(
+    latest_question: str,
+    diagnosis: str,
+    evidence_used: str,
+    impact: str,
+    next_task: str,
+) -> dict[str, Any]:
+    question_label = _trim_graph_label(latest_question or "项目想法", 14) or "项目想法"
+    diagnosis_label = _trim_graph_label(diagnosis or "核心漏洞", 14) or "核心漏洞"
+    evidence_label = _trim_graph_label(evidence_used or "原文证据", 14) or "原文证据"
+    impact_label = _trim_graph_label(impact or "后果风险", 14) or "后果风险"
+    action_label = _trim_graph_label(next_task or "下一任务", 14) or "下一任务"
+    return {
+        "nodes": [
+            {"id": "q1", "label": question_label, "node_type": "question"},
+            {"id": "evidence", "label": evidence_label, "node_type": "case"},
+            {"id": "diagnosis", "label": diagnosis_label, "node_type": "misconception"},
+            {"id": "impact", "label": impact_label, "node_type": "mechanism"},
+            {"id": "action", "label": action_label, "node_type": "action"},
+        ],
+        "edges": [
+            {"source": "q1", "target": "evidence", "label": "暴露出"},
+            {"source": "evidence", "target": "diagnosis", "label": "支撑诊断"},
+            {"source": "diagnosis", "target": "impact", "label": "若不修复"},
+            {"source": "diagnosis", "target": "action", "label": "逼出任务"},
+            {"source": "impact", "target": "action", "label": "要求验证"},
         ],
     }
 
@@ -442,7 +480,10 @@ def project_coach_node(state: AgentState) -> dict[str, Any]:
             "9. 你不能给现成答案，只能指出漏洞、压测假设、逼学生回去验证。\n"
             "10. ONLY ONE Next Task 结尾最好形成一个明确的追问闭环，让学生带着数据或证据回来回答你。\n"
             "11. 你还必须同时生成两段前端展示用推理过程：一个虚构但可信的成功相似项目，以及基于它反推学生想法更容易失败的原因。\n"
-            "12. 这两段内容只用于前端展示推理过程，绝不能混入正式五字段里。"
+            "12. 这两段内容只用于前端展示推理过程，绝不能混入正式五字段里。\n"
+            "13. 你还必须额外生成 graph_nodes 和 graph_edges，把本次压测逻辑压缩成 4 到 6 个节点和 4 到 6 条边。\n"
+            "14. graph_nodes 节点类型优先使用 question、case、misconception、mechanism、action、bridge；label 必须短。\n"
+            "15. graph_edges 的 label 要像真实图谱关系，例如“支撑诊断”“暴露出”“若不修复”“逼出任务”。"
         )
 
         prompt = ChatPromptTemplate.from_messages(
@@ -485,9 +526,25 @@ def project_coach_node(state: AgentState) -> dict[str, Any]:
             f"**为什么你的想法更容易失败**\n{failure_inference}"
         )
 
+        fallback_graph = _build_fallback_coach_graph(
+            latest_user_message,
+            diagnosis,
+            evidence_used,
+            impact,
+            next_task,
+        )
+        reasoning_graph = _build_reasoning_graph(
+            coach_resp.graph_nodes,
+            coach_resp.graph_edges,
+            fallback_graph,
+        )
+
         return {
             "messages": [AIMessage(content=reply_content)],
-            "context": {"reasoning_trace": reasoning_trace},
+            "context": {
+                "reasoning_trace": reasoning_trace,
+                "reasoning_graph": reasoning_graph,
+            },
         }
 
     except Exception as exc:

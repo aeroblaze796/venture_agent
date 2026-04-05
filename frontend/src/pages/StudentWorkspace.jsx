@@ -133,6 +133,10 @@ const Neo4jReasoningGraphPanel = ({ messageId, graph }) => {
     };
   });
 
+  const cypherQuery = `MATCH (n:ReasoningNode {message_id: ${messageId}})
+OPTIONAL MATCH (n)-[r:REASONING_EDGE {message_id: ${messageId}}]->(m:ReasoningNode {message_id: ${messageId}})
+RETURN n, r, m`;
+
   return (
     <div className="mb-4 rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm hover:shadow-md transition-shadow">
       <div className="mb-3 flex items-center justify-between">
@@ -142,7 +146,29 @@ const Neo4jReasoningGraphPanel = ({ messageId, graph }) => {
             GraphRAG Reasoning Topology
           </span>
         </div>
-        <Badge status="processing" text={<span className="text-[10px] text-slate-400">Live Render</span>} />
+        <div className="flex items-center gap-2">
+          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">
+            Nodes {nodes.length}
+          </span>
+          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">
+            Edges {edges.length}
+          </span>
+          <Badge status="processing" text={<span className="text-[10px] text-slate-400">Live Render</span>} />
+        </div>
+      </div>
+
+      <div className="mb-3 overflow-hidden rounded-xl border border-slate-200 bg-slate-950 shadow-sm">
+        <div className="flex items-center justify-between border-b border-slate-800 px-4 py-2">
+          <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-300">
+            cypher查询语句
+          </span>
+          <span className="text-[10px] font-semibold text-slate-500">
+            message_id = {messageId}
+          </span>
+        </div>
+        <pre className="overflow-x-auto px-4 py-3 text-[11px] leading-6 text-emerald-300">
+          <code>{cypherQuery}</code>
+        </pre>
       </div>
 
       <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-center p-2">
@@ -252,7 +278,7 @@ const StudentWorkspace = () => {
 
   const shouldShowReasoning = (message) => (
     message?.role === 'coach'
-    && !!message?.reasoning_trace
+    && (!!message?.reasoning_trace || !!message?.reasoning_graph)
     && (message?.agent === '项目教练 Agent (A2)' || message?.agent === '学习辅导 Agent (A1)')
   );
 
@@ -1068,7 +1094,7 @@ const StudentWorkspace = () => {
                             {shouldShowReasoning(m) && expandedReasoning[`coach-${i}`] && (
                               <div className="rounded-2xl bg-slate-50 border border-slate-200 px-4 py-3 text-[12px] leading-6 text-slate-500">
                                 <Neo4jReasoningGraphPanel messageId={m.message_id || m.id} graph={m.reasoning_graph} />
-                                <ReactMarkdown>{m.reasoning_trace}</ReactMarkdown>
+                                {m.reasoning_trace ? <ReactMarkdown>{m.reasoning_trace}</ReactMarkdown> : null}
                               </div>
                             )}
                             <div className={`message-bubble ${m.role === 'user' ? 'user-bubble' : 'bot-bubble'}`}>
