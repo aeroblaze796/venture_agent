@@ -61,6 +61,8 @@ function Portal() {
         localStorage.setItem('va_realname', data.real_name);
         localStorage.setItem('va_token', data.token);
         localStorage.setItem('va_college', data.college);
+        localStorage.setItem('va_major', data.major || '');
+        localStorage.setItem('va_grade', data.grade || '');
         
         const finalRole = data.role || (targetRole === '/teacher' ? 'teacher' : 'student');
         localStorage.setItem('va_role', finalRole);
@@ -121,6 +123,8 @@ function Portal() {
         localStorage.setItem('va_username', idNum);
         localStorage.setItem('va_realname', realName);
         localStorage.setItem('va_college', school);
+        localStorage.setItem('va_major', payload.major || '');
+        localStorage.setItem('va_grade', payload.grade || '');
         localStorage.setItem('va_token', idNum); 
         
         const finalRole = payload.role;

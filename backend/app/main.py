@@ -1585,12 +1585,23 @@ def admin_get_sqlite_data(table_name: str):
 class ProfileUpdate(BaseModel):
     real_name: Optional[str] = None
     college: Optional[str] = None
+    major: Optional[str] = None
+    grade: Optional[str] = None
 
 @app.get("/api/user/profile")
 def get_user_profile(username: str = Query(...)):
     """获取用户详细资料"""
     try:
-        query = "MATCH (u:User {username: $username}) RETURN u.username as username, u.real_name as real_name, u.role as role, u.college as college"
+        query = """
+        MATCH (u:User {username: $username})
+        RETURN
+            u.username as username,
+            u.real_name as real_name,
+            u.role as role,
+            u.college as college,
+            u.major as major,
+            u.grade as grade
+        """
         result = db.execute_query(query, {"username": username})
         if not result:
             raise HTTPException(status_code=404, detail="User not found")
@@ -1611,6 +1622,12 @@ def update_user_profile(username: str, data: ProfileUpdate):
         if data.college is not None:
             updates.append("u.college = $college")
             params["college"] = data.college
+        if data.major is not None:
+            updates.append("u.major = $major")
+            params["major"] = data.major
+        if data.grade is not None:
+            updates.append("u.grade = $grade")
+            params["grade"] = data.grade
             
         if not updates:
             return {"message": "No changes"}

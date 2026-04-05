@@ -23,7 +23,9 @@ const UserProfileModal = ({ visible, onCancel, username }) => {
         setProfile(data);
         form.setFieldsValue({
           real_name: data.real_name,
-          college: data.college
+          college: data.college,
+          major: data.major,
+          grade: data.grade
         });
       }
     } catch (e) {
@@ -44,6 +46,10 @@ const UserProfileModal = ({ visible, onCancel, username }) => {
       });
       if (res.ok) {
         message.success("个人资料更新成功");
+        if (values.real_name !== undefined) localStorage.setItem('va_realname', values.real_name || '');
+        if (values.college !== undefined) localStorage.setItem('va_college', values.college || '');
+        if (values.major !== undefined) localStorage.setItem('va_major', values.major || '');
+        if (values.grade !== undefined) localStorage.setItem('va_grade', values.grade || '');
         fetchProfile();
       } else {
         message.error("更新失败");
@@ -95,6 +101,16 @@ const UserProfileModal = ({ visible, onCancel, username }) => {
           <Form.Item label={<span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">所属学院/部门</span>} name="college">
             <Input prefix={<BankOutlined className="text-slate-300" />} className="h-11 rounded-xl" />
           </Form.Item>
+          {profile?.role === 'student' ? (
+            <>
+              <Form.Item label={<span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">所属专业</span>} name="major">
+                <Input className="h-11 rounded-xl" />
+              </Form.Item>
+              <Form.Item label={<span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">当前年级</span>} name="grade">
+                <Input className="h-11 rounded-xl" />
+              </Form.Item>
+            </>
+          ) : null}
           <Button type="primary" htmlType="submit" loading={loading} block className="h-12 rounded-2xl bg-indigo-600 border-none shadow-lg shadow-indigo-100 font-black mt-4">
             更新项目档案
           </Button>

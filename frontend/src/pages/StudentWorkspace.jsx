@@ -57,6 +57,38 @@ const CAPABILITY_DIMENSIONS = [
   { key: "compliance", label: "合规性" }
 ];
 
+const GRADE_OPTIONS = [
+  { value: "大一", label: "大一" },
+  { value: "大二", label: "大二" },
+  { value: "大三", label: "大三" },
+  { value: "大四", label: "大四" },
+  { value: "研一", label: "研一" },
+  { value: "研二", label: "研二" },
+  { value: "研三", label: "研三" }
+];
+
+const buildLeaderMemberFromStorage = () => ({
+  name: localStorage.getItem('va_realname') || '',
+  student_id: localStorage.getItem('va_username') || '',
+  role: 'Leader',
+  position: '队长',
+  college: localStorage.getItem('va_college') || '',
+  major: localStorage.getItem('va_major') || '',
+  grade: localStorage.getItem('va_grade') || '',
+  info: ''
+});
+
+const buildMemberDraft = () => ({
+  name: '',
+  student_id: '',
+  role: 'Member',
+  position: '队员',
+  college: '',
+  major: '',
+  grade: '',
+  info: ''
+});
+
 // --- 微型 SVG 雷达图组件 ---
 const RadarChart = ({ data = [], size = 180 }) => {
   const safeData = data.length > 0
@@ -300,7 +332,14 @@ const StudentWorkspace = () => {
   const [currentStep, setCurrentStep] = useState(0);
   const [formError, setFormError] = useState("");
   const [projectForm, setProjectForm] = useState({
-    name: '', competition: '互联网+', track: '高教主赛道', college: '', advisorName: '', advisorId: '', advisorInfo: '', members: []
+    name: '',
+    competition: '互联网+',
+    track: '高教主赛道',
+    college: localStorage.getItem('va_college') || '',
+    advisorName: '',
+    advisorId: '',
+    advisorInfo: '',
+    members: [buildLeaderMemberFromStorage()]
   });
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -320,7 +359,14 @@ const StudentWorkspace = () => {
 
   const handleOpenNewProject = () => {
     setProjectForm({
-      name: '', competition: '互联网+', track: '高教主赛道', college: '', advisorName: '', advisorId: '', advisorInfo: '', members: []
+      name: '',
+      competition: '互联网+',
+      track: '高教主赛道',
+      college: localStorage.getItem('va_college') || '',
+      advisorName: '',
+      advisorId: '',
+      advisorInfo: '',
+      members: [buildLeaderMemberFromStorage()]
     });
     setCurrentStep(0);
     setFormError("");
@@ -936,10 +982,23 @@ const StudentWorkspace = () => {
     }
   };
 
-  const addMember = () => { setProjectForm({ ...projectForm, members: [...projectForm.members, { name: '', student_id: '', role: 'Member', position: '队员', college: '', major: '', grade: '', info: '' }] }); };
+  const addMember = () => {
+    setProjectForm({ ...projectForm, members: [...projectForm.members, buildMemberDraft()] });
+  };
   const updateMember = (idx, field, val) => {
     const newMembers = [...projectForm.members];
-    newMembers[idx][field] = val;
+    const currentMember = newMembers[idx];
+    if (!currentMember) return;
+
+    if (field === 'role') {
+      newMembers[idx] = {
+        ...currentMember,
+        role: idx === 0 ? 'Leader' : 'Member',
+        position: idx === 0 ? '队长' : '队员'
+      };
+    } else {
+      newMembers[idx] = { ...currentMember, [field]: val };
+    }
     setProjectForm({ ...projectForm, members: newMembers });
   };
 
@@ -1760,17 +1819,18 @@ const StudentWorkspace = () => {
                       <div className="grid grid-cols-3 gap-3">
                         <div className="space-y-1"><label className="text-[8px] font-black text-slate-300 ml-1 uppercase">姓名 Name</label><Input placeholder="姓名" value={m.name} onChange={e => updateMember(idx, 'name', e.target.value)} className="h-10 rounded-xl" /></div>
                         <div className="space-y-1"><label className="text-[8px] font-black text-slate-300 ml-1 uppercase">学号 ID</label><Input placeholder="学号" value={m.student_id} onChange={e => updateMember(idx, 'student_id', e.target.value)} className="h-10 rounded-xl" /></div>
-                        <div className="space-y-1"><label className="text-[8px] font-black text-slate-300 ml-1 uppercase">身份 Role</label><Select value={m.role} onChange={v => updateMember(idx, 'role', v)} options={[{ value: 'Leader', label: '队长' }, { value: 'Member', label: '队员' }]} className="h-10 w-full" /></div>
+                        <div className="space-y-1"><label className="text-[8px] font-black text-slate-300 ml-1 uppercase">身份 Role</label><Select value={idx === 0 ? 'Leader' : 'Member'} options={[{ value: idx === 0 ? 'Leader' : 'Member', label: idx === 0 ? '队长' : '队员' }]} disabled className="h-10 w-full" /></div>
                       </div>
                       <div className="grid grid-cols-3 gap-3">
                         <div className="space-y-1"><label className="text-[8px] font-black text-slate-300 ml-1 uppercase">学院 College</label><Input placeholder="所属书院" value={m.college} onChange={e => updateMember(idx, 'college', e.target.value)} className="h-10 rounded-xl" /></div>
                         <div className="space-y-1"><label className="text-[8px] font-black text-slate-300 ml-1 uppercase">专业 Major</label><Input placeholder="主修专业" value={m.major} onChange={e => updateMember(idx, 'major', e.target.value)} className="h-10 rounded-xl" /></div>
-                        <div className="space-y-1"><label className="text-[8px] font-black text-slate-300 ml-1 uppercase">年级 Grade</label><Input placeholder="年级" value={m.grade} onChange={e => updateMember(idx, 'grade', e.target.value)} className="h-10 rounded-xl" /></div>
+                        <div className="space-y-1"><label className="text-[8px] font-black text-slate-300 ml-1 uppercase">年级 Grade</label><Select placeholder="请选择年级" value={m.grade || undefined} onChange={v => updateMember(idx, 'grade', v)} options={GRADE_OPTIONS} className="h-10 w-full" /></div>
                       </div>
-                      <Button size="small" type="text" danger icon={<DeleteOutlined />} onClick={() => { const nm = [...projectForm.members]; nm.splice(idx, 1); setProjectForm({ ...projectForm, members: nm }); }} className="mt-2 text-[9px] font-bold">移除该成员档案</Button>
+                      {idx > 0 ? (
+                        <Button size="small" type="text" danger icon={<DeleteOutlined />} onClick={() => { const nm = [...projectForm.members]; nm.splice(idx, 1); setProjectForm({ ...projectForm, members: nm }); }} className="mt-2 text-[9px] font-bold">移除该成员档案</Button>
+                      ) : null}
                     </div>
                   ))}
-                  {projectForm.members.length === 0 && <div className="py-10 text-center text-slate-300 text-[10px] font-black uppercase tracking-widest border-2 border-dashed border-slate-100 rounded-[32px]">Click 'Add Member' to input team data</div>}
                 </div>
               </div>)}
             </div>

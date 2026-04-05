@@ -64,7 +64,16 @@ def register(user: UserRegister):
 @auth_router.post("/login")
 def login(user: UserAuth):
     # 登录时 username 对应注册时的 id_num (即存储在 Neo4j 的 username 属性中)
-    query = "MATCH (u:User {username: $username, password: $password}) RETURN u.username AS username, u.real_name AS real_name, u.role AS role, u.college AS college"
+    query = """
+    MATCH (u:User {username: $username, password: $password})
+    RETURN
+        u.username AS username,
+        u.real_name AS real_name,
+        u.role AS role,
+        u.college AS college,
+        u.major AS major,
+        u.grade AS grade
+    """
     result = db.execute_query(query, {"username": user.username, "password": user.password})
     
     if not result:
@@ -78,5 +87,7 @@ def login(user: UserAuth):
         "real_name": user_data.get("real_name") or user_data["username"],
         "role": user_data.get("role"),
         "college": user_data.get("college"),
+        "major": user_data.get("major"),
+        "grade": user_data.get("grade"),
         "teacher_id": user_data["username"] if user_data.get("role") == 'teacher' else None
     }
