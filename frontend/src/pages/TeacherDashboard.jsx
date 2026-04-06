@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import UserProfileModal from '../components/UserProfileModal';
 import {
   Table, Tag, Badge, Progress, Card, Button, 
-  Statistic, Empty, Spin, message as antMessage,
+  Statistic, Empty, Spin, Slider, message as antMessage,
   Tabs, Input, Modal, Descriptions, List, Avatar
 } from 'antd';
 import {
@@ -83,6 +83,40 @@ const RUBRIC_DIMENSIONS = [
   { label: 'R9 表达材料', key: 'r9_score' }
 ];
 
+const DEFAULT_RUBRIC_WEIGHTS = RUBRIC_DIMENSIONS.reduce((acc, item) => {
+  acc[item.key] = 1;
+  return acc;
+}, {});
+
+const toRubricScore = (assessment, key) => {
+  const raw = assessment?.[key];
+  const num = Number(raw);
+  return Number.isFinite(num) ? num : 0;
+};
+
+const computeWeightedScore = (assessment, weights) => {
+  const totalWeight = RUBRIC_DIMENSIONS.reduce((sum, item) => sum + Number(weights?.[item.key] ?? 0), 0);
+  if (!totalWeight) return 0;
+  const weightedSum = RUBRIC_DIMENSIONS.reduce((sum, item) => {
+    return sum + toRubricScore(assessment, item.key) * Number(weights?.[item.key] ?? 0);
+  }, 0);
+  return weightedSum / totalWeight;
+};
+
+const getComputedRiskLevel = (weightedScore) => {
+  if (weightedScore <= 2.5) return 'High';
+  if (weightedScore <= 4) return 'Medium';
+  if (weightedScore <= 5) return 'Low';
+  return 'PENDING';
+};
+
+const getRiskTagColor = (riskLevel) => {
+  if (riskLevel === 'High') return 'red';
+  if (riskLevel === 'Medium') return 'orange';
+  if (riskLevel === 'Low') return 'green';
+  return 'default';
+};
+
 const formatEvidenceTrace = (trace) => {
   const normalized = String(trace || '')
     .replace(/<br\s*\/?>/gi, '\n')
@@ -126,6 +160,7 @@ export default function TeacherDashboard() {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [editName, setEditName] = useState(teacherName);
   const [editId, setEditId] = useState(teacherId);
+  const [rubricWeights, setRubricWeights] = useState(DEFAULT_RUBRIC_WEIGHTS);
 
   useEffect(() => {
     if (!teacherName) {
@@ -306,6 +341,9 @@ export default function TeacherDashboard() {
   ];
 
   const evidenceTraceLines = formatEvidenceTrace(projectDetail?.assessment?.evidence_trace);
+  const weightedScore = computeWeightedScore(projectDetail?.assessment, rubricWeights);
+  const computedRiskLevel = getComputedRiskLevel(weightedScore);
+  const weightedFormulaText = `加权平均分 = (${RUBRIC_DIMENSIONS.map(item => `${item.label.split(' ')[0]}×${Number(rubricWeights[item.key] ?? 0).toFixed(1)}`).join(' + ')}) / (${RUBRIC_DIMENSIONS.map(item => Number(rubricWeights[item.key] ?? 0).toFixed(1)).join(' + ')})`;
 
   return (
     <div className="flex h-screen bg-[#0f172a] font-sans overflow-hidden">
@@ -502,8 +540,8 @@ export default function TeacherDashboard() {
                            <RadarChart data={projectDetail?.assessment} />
                            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                               <div className="mt-32">
-                                <Tag color={projectDetail?.assessment?.overall_risk === 'High' ? 'red' : 'orange'} className="px-6 py-2 text-sm font-black rounded-full border-none shadow-xl scale-110">
-                                  {projectDetail?.assessment?.overall_risk || 'PENDING'} RISK
+                                <Tag color={getRiskTagColor(computedRiskLevel)} className="px-6 py-2 text-sm font-black rounded-full border-none shadow-xl scale-110">
+                                  {computedRiskLevel} RISK
                                 </Tag>
                               </div>
                            </div>
@@ -518,7 +556,7 @@ export default function TeacherDashboard() {
                         </h4>
                         <div className="grid grid-cols-3 gap-x-6 gap-y-6">
                           {RUBRIC_DIMENSIONS.map((r, i) => {
-                            const val = projectDetail?.assessment?.[r.key] || 0;
+                            const val = toRubricScore(projectDetail?.assessment, r.key);
                             return (
                               <div key={i} className="flex flex-col min-w-0">
                                 <div className="flex justify-between text-[11px] mb-2 font-black text-slate-500 uppercase tracking-tighter">
@@ -532,7 +570,64 @@ export default function TeacherDashboard() {
                         </div>
                       </div>
 
-                      {/* 第二行左侧：导师专线审计报告 */}
+                      {/* 第二行：风险加权计算器 */}
+                      <div className="col-span-12 rounded-[32px] border border-slate-100 bg-slate-50/70 p-8">
+                        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+                          <div className="min-w-0">
+                            <h5 className="m-0 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                              风险加权计算器
+                            </h5>
+                            <p className="mt-3 mb-0 text-sm text-slate-500 leading-7">
+                              基于 R1-R9 当前得分与教师自定义权重，自动计算项目综合风险等级。
+                            </p>
+                          </div>
+                          <Tag color={getRiskTagColor(computedRiskLevel)} className="rounded-full border-none px-4 py-1 font-black self-start">
+                            加权均分 {weightedScore.toFixed(2)} / 5.0
+                          </Tag>
+                        </div>
+
+                        <div className="mt-6 rounded-[28px] bg-white border border-slate-100 px-6 py-5 shadow-sm">
+                          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 mb-2">
+                            加权公式
+                          </p>
+                          <p className="m-0 text-sm font-bold text-slate-700 leading-7 break-words">
+                            {weightedFormulaText}
+                          </p>
+                          <p className="mt-3 mb-0 text-[11px] text-slate-500 leading-6">
+                            风险判定：加权分 ≤ 2.5 为高风险；2.5 &lt; 加权分 ≤ 4 为中风险；4 &lt; 加权分 ≤ 5 为低风险。
+                          </p>
+                        </div>
+
+                        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                          {RUBRIC_DIMENSIONS.map((item) => (
+                            <div key={item.key} className="rounded-2xl bg-white border border-slate-100 px-4 py-4 shadow-sm">
+                              <div className="flex items-center justify-between mb-3 gap-4">
+                                <span className="text-[11px] font-black uppercase tracking-[0.12em] text-slate-500">
+                                  {item.label}
+                                </span>
+                                <span className="text-sm font-black text-slate-800 shrink-0">
+                                  {Number(rubricWeights[item.key] ?? 0).toFixed(1)}
+                                </span>
+                              </div>
+                              <Slider
+                                min={0}
+                                max={1}
+                                step={0.1}
+                                value={rubricWeights[item.key]}
+                                onChange={(value) => {
+                                  setRubricWeights((prev) => ({
+                                    ...prev,
+                                    [item.key]: Number(value)
+                                  }));
+                                }}
+                                tooltip={{ formatter: (value) => Number(value ?? 0).toFixed(1) }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* 第三行左侧：导师专线审计报告 */}
                       <div className="col-span-6 p-10 bg-slate-900 text-white rounded-[32px] relative overflow-hidden flex flex-col min-h-[420px]">
                         <RobotOutlined className="absolute -right-10 -bottom-10 text-white/5 text-[240px] transform rotate-12" />
                         <div className="relative z-10 flex flex-col h-full">
@@ -562,7 +657,7 @@ export default function TeacherDashboard() {
                         </div>
                       </div>
 
-                      {/* 第二行右侧：证据溯源 */}
+                      {/* 第三行右侧：证据溯源 */}
                       <div className="col-span-6 p-10 bg-slate-50/80 rounded-[32px] border border-slate-100 flex flex-col min-h-[420px]">
                         <div className="flex items-center justify-between mb-8">
                           <h4 className="text-slate-800 text-xs font-black uppercase tracking-widest flex items-center gap-2">
