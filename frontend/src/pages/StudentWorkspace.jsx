@@ -267,7 +267,10 @@ const StudentWorkspace = () => {
   const activeReview = reviewResult;
   const [newLogContent, setNewLogContent] = useState("");
 
-  const [financeData, setFinanceData] = useState({ users: 1000, cac: 50, arpu: 200, fixedCost: 50000 });
+  const [financeTemplate, setFinanceTemplate] = useState({ parameters: [], formulas: [] });
+  const [financeData, setFinanceData] = useState({});
+  const [isFinanceTemplateLoading, setIsFinanceTemplateLoading] = useState(false);
+  
   const [pitchTime, setPitchTime] = useState(300);
   const [isPitching, setIsPitching] = useState(false);
 
@@ -322,15 +325,13 @@ const StudentWorkspace = () => {
         const storedProjectId = Number(localStorage.getItem("va_active_project_id") || "");
         const candidateProjectId = activeProjectId || (Number.isFinite(storedProjectId) ? storedProjectId : null);
         if (candidateProjectId && (data.projects || []).some(p => p.id === candidateProjectId)) {
-          if (activeProjectId !== candidateProjectId) setActiveProjectId(candidateProjectId);
-          await fetchProjectFiles(candidateProjectId, { autoSelectLatest: true });
-          const curProj = (data.projects || []).find(p => p.id === candidateProjectId);
-          if (curProj && !activeFileId && !(projectFiles || []).length) setEditorContent(curProj.content || "");
+          if (activeProjectId !== candidateProjectId) {
+            setActiveProjectId(candidateProjectId);
+          }
         } else if (!activeProjectId && (data.projects || []).length > 0) {
           const firstProjectId = data.projects[0].id;
           setActiveProjectId(firstProjectId);
           localStorage.setItem("va_active_project_id", String(firstProjectId));
-          await fetchProjectFiles(firstProjectId, { autoSelectLatest: true });
         }
       }
     } catch (e) {
@@ -589,6 +590,38 @@ const StudentWorkspace = () => {
     }
   };
 
+  const handleOpenFinanceModal = async () => {
+    if (!activeProjectId) {
+      message.warning("请先切入一个活着的项目");
+      return;
+    }
+
+    if (!hasProjectDocumentView) {
+      message.warning("请先导入项目商业计划书 PDF 或填入项目正文，以为 Financial Agent 提供分析依据！");
+      return;
+    }
+
+    setShowFinanceModal(true);
+    setIsFinanceTemplateLoading(true);
+    try {
+      const res = await fetch(buildApiUrl(`/api/projects/${activeProjectId}/financial-template`));
+      if (res.ok) {
+        const data = await res.json();
+        setFinanceTemplate(data);
+        const initialData = {};
+        data.parameters?.forEach(p => {
+          initialData[p.key] = p.default_value || 0;
+        });
+        setFinanceData(initialData);
+      }
+    } catch(err) {
+      console.error(err);
+      message.error("获取动态财务模板失败");
+    } finally {
+      setIsFinanceTemplateLoading(false);
+    }
+  };
+
   const handleFinancialAnalysis = async () => {
     if (!activeProjectId) {
       message.error("未绑定活跃项目，大模型无法读取上下文依据！");
@@ -597,22 +630,19 @@ const StudentWorkspace = () => {
     setIsFinancialAnalyzing(true);
     setFinancialAdvice(null);
     try {
-      const res = await fetch(buildApiUrl(`/api/projects/${activeProjectId}/financial-analysis`), {
+      const res = await fetch(buildApiUrl(`/api/projects/${activeProjectId}/financial-projection`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          users: financeData.users,
-          cac: financeData.cac,
-          arpu: financeData.arpu,
-          fixedCost: financeData.fixedCost,
-          netProfit: (financeData.users * financeData.arpu) - (financeData.fixedCost + financeData.users * financeData.cac)
+          params: financeData,
+          formulas: financeTemplate.formulas
         })
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.status === 'error') {
         throw new Error(data.message || "DeepSeek 尽调服务暂时不可用");
       }
-      setFinancialAdvice(data.advice);
+      setFinancialAdvice(data);
       message.success("Financial Agent 结构化尽调完毕！");
       setShowFinancialResultModal(true);
     } catch (err) {
@@ -1153,7 +1183,7 @@ const StudentWorkspace = () => {
                         <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center text-xl shadow-inner group-hover:scale-110 transition-transform"><BulbOutlined /></div>
                         <div><span className="block text-sm font-black text-slate-800">深度诊断评估</span><span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">AI Assessment</span></div>
                       </div>
-                      <div onClick={() => setShowFinanceModal(true)} className="group p-6 rounded-3xl bg-white border border-slate-100 hover:border-emerald-200 hover:bg-emerald-50/30 shadow-sm hover:shadow-xl hover:shadow-emerald-100 transition-all cursor-pointer flex flex-col gap-4">
+                      <div onClick={handleOpenFinanceModal} className="group p-6 rounded-3xl bg-white border border-slate-100 hover:border-emerald-200 hover:bg-emerald-50/30 shadow-sm hover:shadow-xl hover:shadow-emerald-100 transition-all cursor-pointer flex flex-col gap-4">
                         <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-xl shadow-inner group-hover:scale-110 transition-transform"><RadarChartOutlined /></div>
                         <div><span className="block text-sm font-black text-slate-800">简易财务推演</span><span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Financial Model</span></div>
                       </div>
@@ -1561,44 +1591,68 @@ const StudentWorkspace = () => {
             <div className="grid grid-cols-2 gap-8">
               <div className="space-y-6">
                 <div className="space-y-4">
-                  <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">预估核心用户基数 / 月</label><Input type="number" value={financeData.users} onChange={e => setFinanceData({ ...financeData, users: Number(e.target.value) })} className="h-12 rounded-xl bg-slate-50 border-none px-4 font-black text-slate-700" /></div>
-                  <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">获客成本 (CAC) / 人</label><Input type="number" value={financeData.cac} onChange={e => setFinanceData({ ...financeData, cac: Number(e.target.value) })} prefix="¥" className="h-12 rounded-xl bg-slate-50 border-none px-4 font-black" /></div>
-                  <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">ARPU 单客收入 / 月</label><Input type="number" value={financeData.arpu} onChange={e => setFinanceData({ ...financeData, arpu: Number(e.target.value) })} prefix="¥" className="h-12 rounded-xl bg-slate-50 border-none px-4 font-black" /></div>
-                  <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">硬性固定成本 / 月</label><Input type="number" value={financeData.fixedCost} onChange={e => setFinanceData({ ...financeData, fixedCost: Number(e.target.value) })} prefix="¥" className="h-12 rounded-xl bg-slate-50 border-none px-4 font-black" /></div>
+                  {isFinanceTemplateLoading ? (
+                    <div className="py-10 text-center"><Spin /> <div className="mt-4 text-xs text-slate-400 font-bold tracking-widest uppercase animate-pulse">正在生成适配当前商业形态的推演沙盘...</div></div>
+                  ) : (
+                    financeTemplate.parameters?.map((p, idx) => (
+                      <div key={idx} className="space-y-1">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{p.label}</label>
+                        <Input 
+                          type="number" 
+                          value={financeData[p.key] || ''} 
+                          onChange={e => setFinanceData({ ...financeData, [p.key]: Number(e.target.value) })}
+                          prefix={p.prefix} 
+                          className="h-12 rounded-xl bg-slate-50 border-none px-4 font-black text-slate-700 hover:bg-white focus:bg-white focus:shadow-md transition-all" 
+                        />
+                      </div>
+                    ))
+                  )}
                 </div>
 
                 <button
                   onClick={handleFinancialAnalysis}
-                  disabled={isFinancialAnalyzing}
-                  className={`w-full mt-6 h-14 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 border-none font-black text-white shadow-lg shadow-emerald-200 hover:shadow-xl hover:scale-[1.02] transition-all flex items-center justify-center text-sm gap-2 ${isFinancialAnalyzing ? 'opacity-50 cursor-not-allowed cursor-wait' : 'cursor-pointer'}`}
+                  disabled={isFinancialAnalyzing || isFinanceTemplateLoading}
+                  className={`w-full mt-6 h-14 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 border-none font-black text-white shadow-lg shadow-emerald-200 hover:shadow-xl hover:scale-[1.02] transition-all flex items-center justify-center text-sm gap-2 ${isFinancialAnalyzing || isFinanceTemplateLoading ? 'opacity-50 cursor-not-allowed cursor-wait' : 'cursor-pointer'}`}
                 >
                   <RocketOutlined className="text-xl" />
-                  {isFinancialAnalyzing ? "正在进行深度风控推演..." : "运行AI金融透视"}
+                  {isFinancialAnalyzing ? "正在进行深度风控推演..." : "执行 AI 面包风控推演 (Run Projection)"}
                 </button>
+
+                {!isFinanceTemplateLoading && financeTemplate.evidence_trace && (
+                  <div className="mt-4 pt-4 border-t border-slate-100 animate-slide-up">
+                    <div className="flex items-center gap-2 mb-2">
+                       <div className="w-5 h-5 rounded bg-blue-50 text-blue-500 flex items-center justify-center"><InfoCircleOutlined className="text-[10px]"/></div>
+                       <span className="text-[10px] font-black tracking-widest text-slate-500 uppercase">生成维度证据追溯 (Evidence Trace)</span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 font-medium m-0 mb-2 leading-relaxed">{financeTemplate.evidence_trace.summary}</p>
+                    <div className="bg-slate-50 rounded-lg p-3 border-l-2 border-blue-400">
+                      <p className="text-[10px] text-slate-500 m-0 font-medium font-serif italic tracking-wide">"{financeTemplate.evidence_trace.exact_quote}"</p>
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="bg-slate-900 rounded-[32px] p-8 text-white relative overflow-hidden flex flex-col justify-center">
                 <div className="absolute top-0 right-0 w-40 h-40 bg-emerald-500/20 blur-[50px] rounded-full"></div>
-                <h4 className="text-[11px] uppercase tracking-[0.2em] text-emerald-400 font-black mb-6">AI 测算结果洞察</h4>
+                <h4 className="text-[11px] uppercase tracking-[0.2em] text-emerald-400 font-black mb-6">VentureCapital™ AI 测算洞察</h4>
 
-                <div className="space-y-6">
-                  <div className="flex justify-between items-center pb-4 border-b border-white/10">
-                    <span className="text-slate-400 text-sm font-bold">月度总营收</span>
-                    <span className="text-2xl font-black">¥ {(financeData.users * financeData.arpu).toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between items-center pb-4 border-b border-white/10">
-                    <span className="text-slate-400 text-sm font-bold">月度总成本</span>
-                    <span className="text-2xl font-black">¥ {(financeData.fixedCost + (financeData.users * financeData.cac)).toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between items-end pt-2">
-                    <span className="text-slate-400 text-sm font-bold">净利润 (Net Profit)</span>
-                    <div className="text-right">
-                      <span className={`text-4xl font-black ${(financeData.users * financeData.arpu) - (financeData.fixedCost + (financeData.users * financeData.cac)) > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>¥ {((financeData.users * financeData.arpu) - (financeData.fixedCost + (financeData.users * financeData.cac))).toLocaleString()}</span>
+                {financialAdvice ? (
+                  <div className="space-y-4 animate-slide-in">
+                    {financialAdvice.metrics?.map((m, i) => (
+                      <div key={i} className="flex justify-between items-center pb-3 border-b border-white/10">
+                         <span className="text-slate-400 text-[11px] font-bold">{m.label}</span>
+                         <span className={`text-sm font-black ${m.trend === 'positive' ? 'text-emerald-400' : m.trend === 'negative' ? 'text-rose-400' : 'text-slate-300'}`}>{m.value}</span>
+                      </div>
+                    ))}
+                    <div className="mt-4 text-[11px] text-emerald-100 leading-relaxed font-medium bg-white/5 p-4 rounded-xl border-l-2 border-emerald-400">
+                      💡 {financialAdvice.ai_insight}
                     </div>
                   </div>
-                </div>
-                <div className="mt-6 text-[10px] text-slate-400 leading-relaxed font-bold bg-white/5 p-4 rounded-xl">
-                  💡 {((financeData.users * financeData.arpu) - (financeData.fixedCost + (financeData.users * financeData.cac))) > 0 ? '商业模式已达到初步模型测算的盈亏平衡点，具有较强的长效可持续性。建议进一步考虑规模效应带来的边际成本递减规律，优化上游供应链。' : '目前该商业模型处于亏损区间。在参加互联网+等侧重商业落地的赛事中，极易受到评委质疑。建议进一步降低 CAC 获取高净值用户，或探索跨界 IP 等多元化营收路径提升 ARPU 空间。'}
-                </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-48 opacity-30">
+                     <RadarChartOutlined className="text-4xl mb-4" />
+                     <span className="text-[10px] tracking-widest uppercase font-black">请在左侧填写项目特征值后进行推演</span>
+                  </div>
+                )}
 
                 {isFinancialAnalyzing && (
                   <div className="mt-4 p-6 bg-slate-800/50 rounded-2xl border border-dashed border-emerald-500/30 flex flex-col items-center justify-center text-center animate-pulse">
@@ -1609,15 +1663,18 @@ const StudentWorkspace = () => {
                 )}
 
                 {/* 核心破局：白盒推演科普面板 */}
-                <div className="mt-4 pt-4 border-t border-white/10">
+                <div className="mt-4 pt-4 border-t border-white/10 flex-1 flex flex-col justify-end">
                   <div className="flex items-center gap-2 mb-3">
                     <div className="w-5 h-5 rounded-md bg-emerald-500/20 text-emerald-400 flex items-center justify-center"><InfoCircleOutlined className="text-[10px]" /></div>
-                    <span className="text-[10px] uppercase font-black tracking-widest text-emerald-400">底层测算推演公式 (White-box Formula)</span>
+                    <span className="text-[10px] uppercase font-black tracking-widest text-emerald-400">项目专属底层测算公式 (White-box Formula)</span>
                   </div>
                   <div className="space-y-2 text-[10px] text-slate-400 font-medium">
-                    <p className="m-0"><strong className="text-white">宏观创收模型 (LTV)</strong> = ∑ (预估用户基数 × ARPU)</p>
-                    <p className="m-0"><strong className="text-white">渠道冷启动耗损</strong> = ∑ (预估用户基数 × CAC)</p>
-                    <p className="m-0"><strong className="text-white">净收益安全阀</strong> = 宏观创收 - (渠道耗损 + 硬性固定成本)</p>
+                    {financeTemplate.formulas?.map((f, i) => (
+                      <div key={i} className="flex gap-2">
+                        <strong className="text-white shrink-0">{f.name}</strong> 
+                        <span className="text-slate-500">= {f.formula}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>

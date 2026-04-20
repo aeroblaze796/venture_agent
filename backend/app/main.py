@@ -38,6 +38,7 @@ from app.database import (
 )
 from langchain_core.messages import HumanMessage
 from app.agent.graph import app_graph
+from app.agent.team_profiling import generate_team_profile
 from app.agent.reasoning_graph_store import (
     build_reasoning_graph_query,
     get_neo4j_connect_url,
@@ -650,6 +651,16 @@ async def generate_conversation_capability_profile(conv_id: str):
     except Exception as e:
         print(f"Failed to generate conversation capability profile: {e}")
         raise HTTPException(status_code=500, detail=f"能力画像生成失败：{str(e)}")
+
+@app.get("/api/projects/{project_id}/team-profile")
+async def get_team_profile(project_id: int):
+    try:
+        from app.agent.team_profiling import generate_team_profile
+        profile = generate_team_profile(project_id)
+        return {"status": "ok", "profile": profile}
+    except Exception as e:
+        print(f"Failed to generate team profile: {e}")
+        raise HTTPException(status_code=500, detail=f"团队画像生成失败：{str(e)}")
 
 @app.post("/api/chat", response_model=ChatResponse)
 def chat_endpoint(request: ChatRequest):
@@ -1621,6 +1632,25 @@ def update_user_profile(username: str, data: ProfileUpdate):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/projects/{project_id}/financial-template")
+async def api_get_financial_template(project_id: int):
+    try:
+        from app.agent.financial_modeling import generate_financial_template
+        data = generate_financial_template(project_id)
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/projects/{project_id}/financial-projection")
+async def api_execute_financial_projection(project_id: int, request: Request):
+    try:
+        from app.agent.financial_modeling import run_financial_projection
+        user_inputs = await request.json()
+        data = run_financial_projection(project_id, user_inputs)
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/{full_path:path}", include_in_schema=False)
 async def serve_frontend(full_path: str):
     """
@@ -1643,4 +1673,4 @@ async def serve_frontend(full_path: str):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
