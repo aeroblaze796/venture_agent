@@ -259,6 +259,7 @@ const StudentWorkspace = () => {
   // Custom modals state
   const [showRubricModal, setShowRubricModal] = useState(false);
   const [selectedRubric, setSelectedRubric] = useState("互联网+");
+  const [customRubricText, setCustomRubricText] = useState("");
   const [showFinanceModal, setShowFinanceModal] = useState(false);
   const [showPitchModal, setShowPitchModal] = useState(false);
 
@@ -924,11 +925,16 @@ const StudentWorkspace = () => {
     setReviewResult("");
     setShowReviewModal(true);
     try {
-      const rubricValue = selectedRubric === "互联网+" ? "internet_plus" : "challenge_cup";
+      const rubricValue = selectedRubric === "互联网+" ? "internet_plus" : selectedRubric === "挑战杯" ? "challenge_cup" : "custom";
+      const bodyPayload = { rubric: rubricValue };
+      if (rubricValue === "custom") {
+        bodyPayload.custom_rubric_text = customRubricText.trim() || "探索性项目";
+      }
+      
       const res = await fetch(buildApiUrl(`/api/projects/${activeProjectId}/review`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rubric: rubricValue })
+        body: JSON.stringify(bodyPayload)
       });
       const data = await res.json();
       setReviewResult(data.review || data.message || "AI 分析完成。");
@@ -1573,7 +1579,26 @@ const StudentWorkspace = () => {
                 <div className="text-lg font-black text-slate-700 mb-1">挑战杯</div>
                 <div className="text-[10px] text-slate-400 tracking-widest uppercase font-bold">侧重学术深度</div>
               </div>
+              <div
+                onClick={() => setSelectedRubric("自定义")}
+                className={`flex-1 p-6 rounded-[24px] border-2 cursor-pointer transition-all ${selectedRubric === "自定义" ? 'border-rose-500 bg-rose-50/50 shadow-lg shadow-rose-100' : 'border-slate-100 hover:border-rose-200'}`}
+              >
+                <div className="text-lg font-black text-slate-700 mb-1">自定义</div>
+                <div className="text-[10px] text-slate-400 tracking-widest uppercase font-bold">动态评价侧重点</div>
+              </div>
             </div>
+
+            {selectedRubric === "自定义" && (
+              <div className="w-full mt-2 animate-slide-in">
+                <Input.TextArea 
+                  rows={2} 
+                  placeholder="请输入您的自定义指标要求，例如：公益型项目，侧重社会影响力和可持续运营机制..." 
+                  className="w-full p-4 rounded-2xl bg-rose-50/30 border border-rose-200 focus:border-rose-400 focus:shadow-md text-sm text-slate-600 font-medium transition-all resize-none" 
+                  value={customRubricText}
+                  onChange={e => setCustomRubricText(e.target.value)}
+                />
+              </div>
+            )}
 
             <Button onClick={handleRequestReview} loading={isReviewing} type="primary" size="large" shape="round" className="w-full bg-slate-900 border-none h-14 font-black mt-2 shadow-xl shadow-slate-200">
               开始执行 AI 深度诊断

@@ -266,6 +266,7 @@ class CommitRequest(BaseModel):
 
 class ReviewRequest(BaseModel):
     rubric: str = "internet_plus"
+    custom_rubric_text: Optional[str] = None
 
 class UpdateContentRequest(BaseModel):
     content: str
@@ -982,9 +983,18 @@ def review_project(project_id: int, request: ReviewRequest):
     try:
         from app.agent.graph import get_llm
         llm = get_llm()
-        rubric_name = "互联网+ (中国国际大学生创新大赛)" if request.rubric == "internet_plus" else "挑战杯 (全国大学生课外学术科技作品竞赛)"
-        system_prompt = f"""你是一个资深的创业项目评审专家，正在为参加“{rubric_name}”的学生提供深度点评。
-        请针对以下项目计划书正文进行多维度的客观评价..."""
+        
+        if request.rubric == "custom" and request.custom_rubric_text:
+            system_prompt = f"""你是一个高度灵活、资深的创新生态评审专家，正在为学生项目提供专门定做的深度点评。
+本次项目评审有着非常特殊、独立的评价标准与项目定性，如下所示：
+【{request.custom_rubric_text}】
+
+请你完全放下传统商赛的条条框框，必须以这个特殊的【项目性质与评价侧重点】为最高的、唯一的打分与审视标准，对以下项目文案进行深度的客观评价！用你的专业去剖析他们在这个独特维度上做得好不好、还需要怎么改。"""
+        else:
+            rubric_name = "互联网+ (中国国际大学生创新大赛)" if request.rubric == "internet_plus" else "挑战杯 (全国大学生课外学术科技作品竞赛)"
+            system_prompt = f"""你是一个资深的创业项目评审专家，正在为参加“{rubric_name}”的学生提供深度点评。
+            请针对以下项目计划书正文进行多维度的客观评价..."""
+            
         response = llm.invoke([("system", system_prompt), ("human", f"项目：{project_name}\n内容：{project_content}")])
         return {"review": response.content}
     except Exception as e:
