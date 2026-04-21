@@ -22,7 +22,8 @@ import {
   UserOutlined,
   BookOutlined,
   SyncOutlined,
-  EditOutlined
+  EditOutlined,
+  CheckCircleOutlined
 } from '@ant-design/icons';
 import { buildApiUrl } from '../config/api';
 
@@ -134,6 +135,64 @@ const formatEvidenceTrace = (trace) => {
   return numberedLines.length > 0 ? numberedLines : [normalized];
 };
 
+const TEAM_PROFILE_LABELS = {
+  diversity: "团队多元化",
+  agility: "迭代敏捷度",
+  coachability: "听劝吸收力",
+  resilience: "抗压韧性",
+  execution: "调研执行力",
+  self_correction: "自纠错能力"
+};
+
+const InteractiveTeamRadarChart = ({ profile, onSelectDimension, selectedDimension }) => {
+  if (!profile || !profile.scores) return null;
+  const metrics = ["diversity", "agility", "coachability", "resilience", "execution", "self_correction"];
+  const centerX = 160, centerY = 160, radius = 90;
+  
+  const points = metrics.map((k, i) => {
+    const angle = (Math.PI * 2 * i) / 6 - Math.PI / 2;
+    const r = (profile.scores[k] / 100) * radius;
+    return `${centerX + r * Math.cos(angle)},${centerY + r * Math.sin(angle)}`;
+  }).join(' ');
+
+  return (
+    <svg width="320" height="320" viewBox="0 0 320 320" className="mx-auto overflow-visible cursor-pointer">
+      {[0.2, 0.4, 0.6, 0.8, 1].map(tick => (
+        <polygon 
+          key={tick}
+          points={metrics.map((_, i) => {
+            const angle = (Math.PI * 2 * i) / 6 - Math.PI / 2;
+            const r = tick * radius;
+            return `${centerX + r * Math.cos(angle)},${centerY + r * Math.sin(angle)}`;
+          }).join(' ')}
+          fill="none" stroke="#e2e8f0" strokeWidth="1"
+        />
+      ))}
+      <polygon points={points} fill="rgba(99, 102, 241, 0.2)" stroke="#6366f1" strokeWidth="2" className="pointer-events-none transition-all duration-500" />
+      {metrics.map((m, i) => {
+        const angle = (Math.PI * 2 * i) / 6 - Math.PI / 2;
+        const xText = centerX + (radius + 25) * Math.cos(angle);
+        const yText = centerY + (radius + 25) * Math.sin(angle);
+        const xHot = centerX + radius * Math.cos(angle);
+        const yHot = centerY + radius * Math.sin(angle);
+        const isSelected = selectedDimension === m;
+        return (
+          <g key={m} onClick={() => onSelectDimension(m)} className="group cursor-pointer">
+            <line x1={centerX} y1={centerY} x2={xHot} y2={yHot} stroke="transparent" strokeWidth="25" />
+            <circle cx={xHot} cy={yHot} r="15" fill={isSelected ? "#6366f1" : "transparent"} className="transition-colors" />
+            <text x={xText} y={yText} fontSize="12" fontWeight="bold" textAnchor="middle" alignmentBaseline="middle" className={`transition-colors ${isSelected ? "fill-indigo-600 font-black" : "fill-slate-400 group-hover:fill-indigo-500"}`}>
+              {TEAM_PROFILE_LABELS[m]}
+            </text>
+            <text x={xText} y={yText + 18} fontSize="11" fontWeight="bold" textAnchor="middle" alignmentBaseline="middle" className={`transition-opacity ${isSelected ? "fill-indigo-600 opacity-100" : "fill-indigo-400 opacity-0 group-hover:opacity-100"}`}>
+              {profile.scores[m]}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+};
+
 export default function TeacherDashboard() {
   const navigate = useNavigate();
   const [activeMenu, setActiveMenu] = useState('overview'); // 'overview' 或 项目ID
@@ -161,6 +220,11 @@ export default function TeacherDashboard() {
   const [editName, setEditName] = useState(teacherName);
   const [editId, setEditId] = useState(teacherId);
   const [rubricWeights, setRubricWeights] = useState(DEFAULT_RUBRIC_WEIGHTS);
+
+  const [teamProfile, setTeamProfile] = useState(null);
+  const [teamProfileLoading, setTeamProfileLoading] = useState(false);
+  const [selectedTeamEvidence, setSelectedTeamEvidence] = useState(null);
+  const [selectedDimension, setSelectedDimension] = useState(null);
 
   useEffect(() => {
     if (!teacherName) {
@@ -192,6 +256,9 @@ export default function TeacherDashboard() {
 
   const selectProject = async (id) => {
     setLoading(true);
+    setTeamProfile(null);
+    setSelectedTeamEvidence(null);
+    setSelectedDimension(null);
     try {
       const res = await fetch(buildApiUrl(`/api/teacher/projects/${id}`));
       if (res.ok) {
@@ -203,6 +270,35 @@ export default function TeacherDashboard() {
       antMessage.error("获取项目详情失败");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchTeamProfile = async () => {
+    if (!projectDetail) return;
+    setTeamProfileLoading(true);
+    setTeamProfile(null);
+    setSelectedTeamEvidence(null);
+    setSelectedDimension(null);
+    try {
+      const res = await fetch(buildApiUrl(`/api/projects/${projectDetail.project.id}/team-profile`));
+      
+      if (!res.ok) {
+        let errMsg = "生成失败，可能是对话数据还不够，积累3轮带思考的对话试试~";
+        try {
+           const errData = await res.json();
+           if (errData.detail) errMsg = errData.detail;
+        } catch(err) {}
+        antMessage.warning({ content: errMsg, duration: 4 });
+        return;
+      }
+      
+      const data = await res.json();
+      setTeamProfile(data.profile);
+      antMessage.success("动态画像生成成功！", 3);
+    } catch (e) {
+      antMessage.error("网络异常或服务出错，生成画像失败", 3);
+    } finally {
+      setTeamProfileLoading(false);
     }
   };
 
@@ -729,6 +825,97 @@ export default function TeacherDashboard() {
                     </div>
                   </div>
                 </div>
+
+                <div className="col-span-12 mt-8">
+                  <Card 
+                    title={<span className="text-slate-800 font-black uppercase tracking-tight"><UserOutlined className="mr-2 text-indigo-500" /> Team Dynamics & Execution Profile</span>} 
+                    extra={teamProfile && teamProfile.scores ? <Button type="dashed" onClick={fetchTeamProfile} icon={<SyncOutlined />} className="rounded-full font-bold text-xs">重新评估 (Refresh)</Button> : null}
+                    className="border-none shadow-xl rounded-[40px] bg-white p-2"
+                  >
+                    {teamProfileLoading ? (
+                      <div className="flex justify-center items-center h-64 text-slate-400"><Spin /> <span className="ml-3">正在拉取团队历史交锋记录生成动态画像...</span></div>
+                    ) : teamProfile && teamProfile.scores ? (
+                      <div className="grid grid-cols-12 gap-8 p-6">
+                         <div className="col-span-6 flex flex-col items-center justify-center p-6 bg-slate-50/50 rounded-[32px] border border-slate-100 relative">
+                           <p className="text-xs text-slate-400 font-medium mb-4">💡 点击雷达图顶角查看大模型抽取证据</p>
+                           <InteractiveTeamRadarChart 
+                              profile={teamProfile} 
+                              selectedDimension={selectedDimension}
+                              onSelectDimension={(dim) => { 
+                                setSelectedDimension(dim);
+                                setSelectedTeamEvidence(teamProfile.evidences[dim]); 
+                              }} 
+                           />
+                         </div>
+                         <div className="col-span-6 p-10 bg-indigo-50/30 rounded-[32px] border border-indigo-50 relative flex flex-col h-full justify-center min-h-[300px]">
+                           {selectedDimension ? (
+                             <div className="animate-in fade-in zoom-in-95 duration-300 relative z-10 w-full h-full flex flex-col justify-center">
+                               <div className="bg-white text-indigo-600 px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest self-start mb-6 border border-indigo-100 shadow-sm">
+                                 {TEAM_PROFILE_LABELS[selectedDimension]} · Evidence Trace
+                               </div>
+                               
+                               {typeof selectedTeamEvidence === 'string' ? (
+                                 <h3 className="text-xl font-bold text-slate-700 mb-6 leading-[1.8]">
+                                   {selectedTeamEvidence}
+                                 </h3>
+                               ) : (
+                                 <>
+                                   <h3 className="text-lg font-bold text-slate-700 mb-4 leading-[1.8]">
+                                     {selectedTeamEvidence?.summary}
+                                   </h3>
+                                   {selectedTeamEvidence?.exact_quote && (
+                                     <div className="bg-white/60 border-l-4 border-indigo-400 p-5 rounded-r-[24px] italic text-slate-600 text-[14px] mb-8 shadow-sm">
+                                       <div className="font-black text-[10px] uppercase text-indigo-400 mb-2 tracking-widest flex items-center gap-2">
+                                         <CheckCircleOutlined /> 原文对话摘录 (Raw Chat Excerpt)
+                                       </div>
+                                       "{selectedTeamEvidence.exact_quote}"
+                                     </div>
+                                   )}
+                                 </>
+                               )}
+                               
+                               <div className="text-[10px] uppercase font-black tracking-widest text-slate-400 mt-auto flex items-center gap-2">
+                                 <CheckCircleOutlined className="text-indigo-400 text-sm" /> LLM Cross-Verified from Conversation Logs
+                               </div>
+                             </div>
+                           ) : (
+                             <div className="text-center w-full h-full flex flex-col justify-center">
+                               <h3 className="text-2xl font-black text-slate-800 mb-6 tracking-tighter">团队执行力总评</h3>
+                               <p className="text-slate-600 leading-[1.8] text-[15px] font-medium bg-white p-6 rounded-3xl border border-slate-100 shadow-sm text-left">
+                                 {teamProfile.overall_comment}
+                               </p>
+                               <div className="mt-8 pt-6 border-t border-indigo-100/50 flex justify-center">
+                                 <Tag color="indigo" className="px-5 py-2.5 rounded-full border-none font-black text-[10px] uppercase tracking-widest shadow-sm">
+                                   Please interact with radar chart
+                                 </Tag>
+                               </div>
+                             </div>
+                           )}
+                         </div>
+                      </div>
+                    ) : (
+                      <div className="py-20 flex flex-col items-center justify-center text-center">
+                        <Button 
+                          type="primary" 
+                          size="large" 
+                          onClick={fetchTeamProfile}
+                          className="bg-indigo-600 hover:bg-slate-800 border-none font-black px-12 h-16 rounded-full shadow-lg shadow-indigo-500/20 mb-8 text-base tracking-widest transition-all active:scale-95 flex items-center justify-center gap-3"
+                        >
+                          <SyncOutlined /> 启动执行力诊断 (GENERATE PROFILE)
+                        </Button>
+                        <div className="max-w-2xl mx-auto bg-slate-50/80 p-8 rounded-[32px] border border-slate-100">
+                           <p className="text-slate-700 font-bold mb-4 flex items-center justify-center gap-2 text-[15px]">
+                             <span className="text-2xl">💡</span> 基于当前项目最近 3 轮问答生成，继续对话后可重新点击生成刷新。
+                           </p>
+                           <p className="text-slate-600 text-[14px] leading-8 m-0 font-bold">
+                             功能原理：系统将提取本组所有成员与 AI 模拟投资人的“抗压对话记录”，通过核心大模型引擎评估团队的抗风险韧性、成员多元化补充与实质调研行动力，协助导师跳出由于文字 BP 掩饰带来的评估盲区。
+                           </p>
+                        </div>
+                      </div>
+                    )}
+                  </Card>
+                </div>
+
               </div>
             </div>
           )}

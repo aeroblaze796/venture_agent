@@ -38,6 +38,7 @@ from app.database import (
 )
 from langchain_core.messages import HumanMessage
 from app.agent.graph import app_graph
+from app.agent.team_profiling import generate_team_profile
 from app.agent.reasoning_graph_store import (
     build_reasoning_graph_query,
     get_neo4j_connect_url,
@@ -265,6 +266,7 @@ class CommitRequest(BaseModel):
 
 class ReviewRequest(BaseModel):
     rubric: str = "internet_plus"
+    custom_rubric_text: Optional[str] = None
 
 class UpdateContentRequest(BaseModel):
     content: str
@@ -651,6 +653,16 @@ async def generate_conversation_capability_profile(conv_id: str):
         print(f"Failed to generate conversation capability profile: {e}")
         raise HTTPException(status_code=500, detail=f"能力画像生成失败：{str(e)}")
 
+@app.get("/api/projects/{project_id}/team-profile")
+async def get_team_profile(project_id: int):
+    try:
+        from app.agent.team_profiling import generate_team_profile
+        profile = generate_team_profile(project_id)
+        return {"status": "ok", "profile": profile}
+    except Exception as e:
+        print(f"Failed to generate team profile: {e}")
+        raise HTTPException(status_code=500, detail=f"团队画像生成失败：{str(e)}")
+
 @app.post("/api/chat", response_model=ChatResponse)
 def chat_endpoint(request: ChatRequest):
     # --- 教师干预逻辑注入 ---
@@ -984,9 +996,18 @@ def review_project(project_id: int, request: ReviewRequest):
     try:
         from app.agent.graph import get_llm
         llm = get_llm()
-        rubric_name = "互联网+ (中国国际大学生创新大赛)" if request.rubric == "internet_plus" else "挑战杯 (全国大学生课外学术科技作品竞赛)"
-        system_prompt = f"""你是一个资深的创业项目评审专家，正在为参加“{rubric_name}”的学生提供深度点评。
-        请针对以下项目计划书正文进行多维度的客观评价..."""
+        
+        if request.rubric == "custom" and request.custom_rubric_text:
+            system_prompt = f"""你是一个高度灵活、资深的创新生态评审专家，正在为学生项目提供专门定做的深度点评。
+本次项目评审有着非常特殊、独立的评价标准与项目定性，如下所示：
+【{request.custom_rubric_text}】
+
+请你完全放下传统商赛的条条框框，必须以这个特殊的【项目性质与评价侧重点】为最高的、唯一的打分与审视标准，对以下项目文案进行深度的客观评价！用你的专业去剖析他们在这个独特维度上做得好不好、还需要怎么改。"""
+        else:
+            rubric_name = "互联网+ (中国国际大学生创新大赛)" if request.rubric == "internet_plus" else "挑战杯 (全国大学生课外学术科技作品竞赛)"
+            system_prompt = f"""你是一个资深的创业项目评审专家，正在为参加“{rubric_name}”的学生提供深度点评。
+            请针对以下项目计划书正文进行多维度的客观评价..."""
+            
         response = llm.invoke([("system", system_prompt), ("human", f"项目：{project_name}\n内容：{project_content}")])
         return {"review": response.content}
     except Exception as e:
@@ -1651,6 +1672,25 @@ def update_user_profile(username: str, data: ProfileUpdate):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/projects/{project_id}/financial-template")
+async def api_get_financial_template(project_id: int):
+    try:
+        from app.agent.financial_modeling import generate_financial_template
+        data = generate_financial_template(project_id)
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/projects/{project_id}/financial-projection")
+async def api_execute_financial_projection(project_id: int, request: Request):
+    try:
+        from app.agent.financial_modeling import run_financial_projection
+        user_inputs = await request.json()
+        data = run_financial_projection(project_id, user_inputs)
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/{full_path:path}", include_in_schema=False)
 async def serve_frontend(full_path: str):
     """
@@ -1673,4 +1713,4 @@ async def serve_frontend(full_path: str):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
