@@ -399,8 +399,6 @@ const StudentWorkspace = () => {
           const curProj = (data.projects || []).find(p => p.id === candidateProjectId);
           if (curProj && (!Array.isArray(files) || files.length === 0)) {
             setEditorContent(curProj.content || "");
-          if (activeProjectId !== candidateProjectId) {
-            setActiveProjectId(candidateProjectId);
           }
         } else if (!activeProjectId && (data.projects || []).length > 0) {
           const firstProjectId = data.projects[0].id;
